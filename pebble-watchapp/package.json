@@ -1,0 +1,28 @@
+{
+  "name": "peleprompter",
+  "author": "Peleprompter Team",
+  "version": "1.0.0",
+  "keywords": ["pebble-app"],
+  "private": true,
+  "dependencies": {},
+  "pebble": {
+    "displayName": "Peleprompter",
+    "uuid": "1ced8e88-c6d6-476d-8f55-dc51edf6d9a7",
+    "sdkVersion": "3",
+    "enableMultiJS": false,
+    "targetPlatforms": ["aplite", "basalt", "chalk", "diorite", "emery", "gabbro"],
+    "watchapp": {
+      "watchface": false
+    },
+    "messageKeys": {
+      "KEY_COMMAND": 0,
+      "KEY_TEXT_OFFSET": 1,
+      "KEY_TEXT_CHUNK": 2,
+      "KEY_SCROLL_SPEED": 3,
+      "KEY_TEXT_SIZE": 4
+    },
+    "resources": {
+      "media": []
+    }
+  }
+}
