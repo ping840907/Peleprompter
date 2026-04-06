@@ -9,10 +9,12 @@ android {
 
     defaultConfig {
         applicationId = "com.peleprompter"
-        minSdk = 21
+        minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 4
+        versionName = "1.0.3"
+
+        // 移除 abiFilters 以減少現代設備上的架構限制
     }
 
     buildTypes {
