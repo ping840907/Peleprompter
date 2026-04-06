@@ -63,6 +63,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         commManager.onWatchRequestReceived = { offset ->
             _statusMessage.postValue("Watch reading at offset: $offset")
         }
+        commManager.onSettingsUpdated = { settings ->
+            _watchSettings.postValue(settings)
+        }
     }
 
     // ================================================================
