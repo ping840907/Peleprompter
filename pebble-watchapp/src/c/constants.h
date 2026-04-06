@@ -8,6 +8,12 @@
 #include <pebble.h>
 
 // ============================================================
+// 離線測試功能 (Mock Mode)
+// ============================================================
+// 設為 1 可在未連線時自動載入測試文字以供預覽
+#define ENABLE_MOCK_MODE 1
+
+// ============================================================
 // 通訊協定鍵值 (與 Android 端一致)
 // ============================================================
 #define KEY_COMMAND        0   // (Int) 指令類型
@@ -79,8 +85,8 @@ extern const uint16_t SCROLL_INTERVALS_MS[7];
 #define MANUAL_SCROLL_PAUSE_MS 2000
 
 // 手動捲動每次跳動的像素數
-#define MANUAL_SCROLL_SHORT_PX 20
-#define MANUAL_SCROLL_LONG_PX  80
+#define MANUAL_SCROLL_SHORT_PX 60
+#define MANUAL_SCROLL_LONG_PX  120
 
 // ============================================================
 // 圓形螢幕邊距 (Chalk / Gabbro)

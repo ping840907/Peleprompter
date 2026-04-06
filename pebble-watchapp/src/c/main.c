@@ -44,6 +44,10 @@ static int32_t s_total_content_height = 0;   // 目前文字的總高度 (像素
 static bool    s_auto_scroll_active = false;  // 自動捲動是否啟動
 static AppTimer *s_scroll_timer = NULL;       // 自動捲動計時器
 
+// 手動捲動動畫狀態
+static AppTimer *s_manual_anim_timer = NULL;
+static int32_t s_target_scroll_offset_px = -1;  // 目標捲動位置 (-1 表示未在動畫中)
+
 // 手動捲動暫停
 static AppTimer *s_manual_pause_timer = NULL;
 static bool s_manual_pause_active = false;
@@ -244,9 +248,9 @@ static void auto_scroll_tick(void *data) {
 
     if (!s_auto_scroll_active || s_manual_pause_active) return;
 
-    // 計算最大可捲動偏移量
-    GRect bounds = layer_get_bounds(s_canvas_layer);
-    int32_t max_offset = s_total_content_height - bounds.size.h;
+    // 計算最大可捲動偏移量 (依據文字區塊的實際高度)
+    GRect text_bounds = get_text_bounds();
+    int32_t max_offset = s_total_content_height - text_bounds.size.h;
     if (max_offset < 0) max_offset = 0;
 
     if (s_scroll_offset_px < max_offset) {
@@ -254,6 +258,15 @@ static void auto_scroll_tick(void *data) {
         if (s_scroll_offset_px > max_offset) {
             s_scroll_offset_px = max_offset;
         }
+
+        // 當自動捲動同時加上手動目標也在變化時，讓目標同步往前移，避免向下手動動畫被自動捲動拉扯
+        if (s_target_scroll_offset_px >= 0) {
+            s_target_scroll_offset_px += SCROLL_STEP_PX;
+            if (s_target_scroll_offset_px > max_offset) {
+                s_target_scroll_offset_px = max_offset;
+            }
+        }
+
         layer_mark_dirty(s_canvas_layer);
         check_prefetch();
         schedule_auto_scroll();  // 繼續排程下一次捲動
@@ -267,9 +280,13 @@ static void auto_scroll_tick(void *data) {
             check_prefetch();
 
             if (!s_bt_connected) {
+#if ENABLE_MOCK_MODE
+                // Mock Mode 啟用時，不顯示斷線警告
+#else
                 // 離線且緩衝區已到底 → 顯示斷線警告
                 s_show_disconnect_warning = true;
                 layer_mark_dirty(s_canvas_layer);
+#endif
             }
             // 不排程下一次捲動，等收到新區塊後由 on_text_chunk_received 恢復
         }
@@ -280,6 +297,13 @@ static void auto_scroll_tick(void *data) {
 static void start_auto_scroll(void) {
     s_auto_scroll_active = true;
     s_manual_pause_active = false;
+    
+    // 開啟自動捲動後，立刻取消所有等待恢復的暫停計時器
+    if (s_manual_pause_timer) {
+        app_timer_cancel(s_manual_pause_timer);
+        s_manual_pause_timer = NULL;
+    }
+    
     schedule_auto_scroll();
 }
 
@@ -324,24 +348,57 @@ static void trigger_manual_pause(void) {
     }
 }
 
+#define MANUAL_ANIMATION_STEP_MS 33
+
+static void manual_anim_tick(void *data) {
+    s_manual_anim_timer = NULL;
+
+    if (s_target_scroll_offset_px < 0) return;
+
+    if (s_scroll_offset_px != s_target_scroll_offset_px) {
+        // 使用 easing 讓動畫平滑：每次移動剩餘距離的一半
+        int32_t diff = s_target_scroll_offset_px - s_scroll_offset_px;
+        int32_t step = diff / 2;
+        if (step == 0) {
+            step = (diff > 0) ? 1 : -1;
+        }
+
+        s_scroll_offset_px += step;
+        layer_mark_dirty(s_canvas_layer);
+
+        // 繼續觸發下一幀動畫
+        s_manual_anim_timer = app_timer_register(MANUAL_ANIMATION_STEP_MS, manual_anim_tick, NULL);
+    } else {
+        // 到達目標位置
+        s_target_scroll_offset_px = -1;
+        check_prefetch();
+    }
+}
+
 /** 執行手動捲動 */
 static void do_manual_scroll(int32_t delta_px) {
-    GRect bounds = layer_get_bounds(s_canvas_layer);
-    int32_t max_offset = s_total_content_height - bounds.size.h;
+    GRect text_bounds = get_text_bounds();
+    int32_t max_offset = s_total_content_height - text_bounds.size.h;
     if (max_offset < 0) max_offset = 0;
 
-    s_scroll_offset_px += delta_px;
-    if (s_scroll_offset_px < 0) s_scroll_offset_px = 0;
-    if (s_scroll_offset_px > max_offset) s_scroll_offset_px = max_offset;
+    // 初始化目標位置 (如果當前沒有動畫在進行)
+    if (s_target_scroll_offset_px < 0) {
+        s_target_scroll_offset_px = s_scroll_offset_px;
+    }
 
-    // 僅向上捲動 (delta < 0) 時暫停自動捲動；
-    // 向下捲動與自動捲動同方向，不需暫停
+    s_target_scroll_offset_px += delta_px;
+    if (s_target_scroll_offset_px < 0) s_target_scroll_offset_px = 0;
+    if (s_target_scroll_offset_px > max_offset) s_target_scroll_offset_px = max_offset;
+
+    // 只有在向上捲動時暫停自動捲動，向下與自動捲動同向則不打斷閱讀流暢度
     if (delta_px < 0) {
         trigger_manual_pause();
     }
 
-    layer_mark_dirty(s_canvas_layer);
-    check_prefetch();
+    // 啟動動畫計時器
+    if (!s_manual_anim_timer) {
+        s_manual_anim_timer = app_timer_register(MANUAL_ANIMATION_STEP_MS, manual_anim_tick, NULL);
+    }
 }
 
 // ============================================================
@@ -366,7 +423,9 @@ static void down_long_click(ClickRecognizerRef recognizer, void *context) {
 
 static void select_short_click(ClickRecognizerRef recognizer, void *context) {
     // 播放/暫停自動捲動
-    if (s_auto_scroll_active) {
+    // 如果目前是啟動狀態且沒有被手動捲動卡住暫停，才算是真的「播放中」，此時按鈕為暫停；
+    // 反之 (包含已手動暫停卡住時) 一律直接切換為無條件啟動。
+    if (s_auto_scroll_active && !s_manual_pause_active) {
         stop_auto_scroll();
     } else {
         start_auto_scroll();
@@ -384,6 +443,12 @@ static void on_settings_changed(int32_t speed, TextSizeLevel size) {
         s_current_font = get_font_for_size(s_text_size);
         refresh_flat_text();  // 重新計算高度
         s_scroll_offset_px = 0;  // 字型改變後重置捲動位置
+        
+        if (s_manual_anim_timer) {
+            app_timer_cancel(s_manual_anim_timer);
+            s_manual_anim_timer = NULL;
+        }
+        s_target_scroll_offset_px = -1;
     }
 
     // 如果自動捲動中，以新速度重新排程
@@ -477,6 +542,10 @@ static void on_text_chunk_received(int32_t offset, const char *text, int32_t len
     if (head_start >= 0 && offset < head_start) {
         int32_t height_delta = s_total_content_height - old_height;
         s_scroll_offset_px += height_delta;
+        
+        if (s_target_scroll_offset_px >= 0) {
+            s_target_scroll_offset_px += height_delta;
+        }
     }
 
     // 隱藏斷線警告 (收到新文字了)
@@ -536,6 +605,12 @@ static void on_connection_changed(bool connected) {
         // 如果緩衝區不完整，繼續預取
         check_prefetch();
     }
+#if ENABLE_MOCK_MODE
+    else {
+        // Mock 模式下，斷線也能載入假資料，因此嘗試預取
+        check_prefetch();
+    }
+#endif
     // 斷線時不立刻警告，允許繼續閱讀緩衝區中的文字
     // 只有在捲動到緩衝區盡頭時才顯示警告 (在 auto_scroll_tick 中處理)
 }
@@ -623,6 +698,10 @@ static void deinit(void) {
     if (s_manual_pause_timer) {
         app_timer_cancel(s_manual_pause_timer);
         s_manual_pause_timer = NULL;
+    }
+    if (s_manual_anim_timer) {
+        app_timer_cancel(s_manual_anim_timer);
+        s_manual_anim_timer = NULL;
     }
 
     // 釋放扁平化文字
