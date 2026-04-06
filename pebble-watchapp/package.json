@@ -1,9 +1,9 @@
 {
   "name": "peleprompter",
-  "author": "Peleprompter Team",
+  "author": "Sloth8497",
   "version": "1.0.0",
   "keywords": ["pebble-app"],
-  "private": true,
+  "private": false,
   "dependencies": {},
   "pebble": {
     "displayName": "Peleprompter",
