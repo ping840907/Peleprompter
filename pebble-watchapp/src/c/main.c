@@ -449,7 +449,21 @@ static void on_text_chunk_received(int32_t offset, const char *text, int32_t len
         ring_buffer_append(&s_ring_buffer, offset, text, len);
     } else if (head_start >= 0 && offset < head_start) {
         // 插入到頭部 (向上載入)
-        ring_buffer_prepend(&s_ring_buffer, offset, text, len);
+        // 檢查新區塊是否與既有頭部重疊
+        int32_t new_end = offset + len;
+        if (new_end > head_start) {
+            // 重疊了，切除重疊部分
+            int32_t overlapping_len = new_end - head_start;
+            int32_t safe_len = len - overlapping_len;
+            if (safe_len > 0) {
+                ring_buffer_prepend(&s_ring_buffer, offset, text, safe_len);
+            } else {
+                APP_LOG(APP_LOG_LEVEL_DEBUG, "區塊完全重疊，忽略: offset=%ld", (long)offset);
+                return;
+            }
+        } else {
+            ring_buffer_prepend(&s_ring_buffer, offset, text, len);
+        }
     } else {
         // 重複或重疊的區塊，忽略
         APP_LOG(APP_LOG_LEVEL_DEBUG, "忽略重複區塊 offset=%ld", (long)offset);

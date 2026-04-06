@@ -46,6 +46,7 @@ class PebbleCommManager(
     // 狀態監聽
     var onBookmarkUpdated: ((Int) -> Unit)? = null
     var onWatchRequestReceived: ((Int) -> Unit)? = null
+    var onSettingsUpdated: ((WatchSettings) -> Unit)? = null
 
     // 防止重複註冊
     private var isRegistered = false
@@ -88,7 +89,7 @@ class PebbleCommManager(
                 if (retryCount < maxRetries && lastSentDict != null) {
                     retryCount++
                     handler.postDelayed({
-                        lastSentDict?.let { sendToPebble(it) }
+                        lastSentDict?.let { sendToPebble(it, isRetry = true) }
                     }, 500L * retryCount) // 遞增延遲重試
                 }
             }
@@ -157,6 +158,7 @@ class PebbleCommManager(
                     speed?.let { settings.scrollSpeed = it }
                     size?.let { settings.textSize = it }
                     prefsManager.saveWatchSettings(settings)
+                    onSettingsUpdated?.invoke(settings)
                     Log.d(TAG, "手錶設定已更新: speed=$speed, size=$size")
                 }
             }
@@ -249,9 +251,11 @@ class PebbleCommManager(
     // 底層傳送
     // ================================================================
 
-    private fun sendToPebble(dict: PebbleDictionary) {
+    private fun sendToPebble(dict: PebbleDictionary, isRetry: Boolean = false) {
         lastSentDict = dict
-        retryCount = 0
+        if (!isRetry) {
+            retryCount = 0
+        }
         PebbleKit.sendDataToPebble(context, PebbleProtocol.PEBBLE_APP_UUID, dict)
     }
 }
