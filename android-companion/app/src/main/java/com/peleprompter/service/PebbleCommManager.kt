@@ -1,6 +1,10 @@
 package com.peleprompter.service
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.IntentFilter
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -62,6 +66,26 @@ class PebbleCommManager(
             unregister()
         }
 
+        // 使用 ContextWrapper 包裝 Context，強制注入 RECEIVER_EXPORTED 旗標
+        // 這是為了解決 PebbleKit 在 Android 14+ 沒帶旗標導致的 SecurityException
+        val exportedContext = object : ContextWrapper(context) {
+            override fun registerReceiver(receiver: BroadcastReceiver?, filter: IntentFilter?): android.content.Intent? {
+                return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    super.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+                } else {
+                    super.registerReceiver(receiver, filter)
+                }
+            }
+
+            override fun registerReceiver(receiver: BroadcastReceiver?, filter: IntentFilter?, flags: Int): android.content.Intent? {
+                return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    super.registerReceiver(receiver, filter, flags or Context.RECEIVER_EXPORTED)
+                } else {
+                    super.registerReceiver(receiver, filter, flags)
+                }
+            }
+        }
+
         // 資料接收器 - 處理手錶的請求
         dataReceiver = object : PebbleKit.PebbleDataReceiver(PebbleProtocol.PEBBLE_APP_UUID) {
             override fun receiveData(context: Context, transactionId: Int, data: PebbleDictionary) {
@@ -70,7 +94,7 @@ class PebbleCommManager(
                 handleWatchMessage(data)
             }
         }
-        PebbleKit.registerReceivedDataHandler(context, dataReceiver)
+        PebbleKit.registerReceivedDataHandler(exportedContext, dataReceiver)
 
         // ACK 接收器
         ackReceiver = object : PebbleKit.PebbleAckReceiver(PebbleProtocol.PEBBLE_APP_UUID) {
@@ -80,7 +104,7 @@ class PebbleCommManager(
                 lastSentDict = null
             }
         }
-        PebbleKit.registerReceivedAckHandler(context, ackReceiver)
+        PebbleKit.registerReceivedAckHandler(exportedContext, ackReceiver)
 
         // NACK 接收器
         nackReceiver = object : PebbleKit.PebbleNackReceiver(PebbleProtocol.PEBBLE_APP_UUID) {
@@ -94,10 +118,10 @@ class PebbleCommManager(
                 }
             }
         }
-        PebbleKit.registerReceivedNackHandler(context, nackReceiver)
+        PebbleKit.registerReceivedNackHandler(exportedContext, nackReceiver)
 
         isRegistered = true
-        Log.i(TAG, "PebbleKit 接收器已註冊")
+        Log.i(TAG, "PebbleKit 接收器已註冊 (含 Android 14 相容修復)")
     }
 
     /** 取消註冊所有接收器 */
