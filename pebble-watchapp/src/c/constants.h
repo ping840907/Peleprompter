@@ -50,7 +50,7 @@ typedef enum {
   #define CHUNK_SIZE               512    // 每次請求的文字區塊大小
   #define PREFETCH_SCREEN_COUNT    3      // 預載 3 個螢幕高度
 #else
-  // Basalt, Diorite, Emery
+  // Basalt, Diorite, Flint, Emery
   #define RING_BUFFER_CAPACITY     5120   // 節點記憶體上限 (實際佔用 ≈ 10KB 含副本)
   #define CHUNK_SIZE               512    // 每次請求的文字區塊大小
   #define PREFETCH_SCREEN_COUNT    3      // 預載 3 個螢幕高度
