@@ -2,7 +2,9 @@
   "name": "peleprompter",
   "author": "Sloth8497",
   "version": "1.0.0",
-  "keywords": ["pebble-app"],
+  "keywords": [
+    "pebble-app"
+  ],
   "private": false,
   "dependencies": {},
   "pebble": {
@@ -10,7 +12,15 @@
     "uuid": "1ced8e88-c6d6-476d-8f55-dc51edf6d9a7",
     "sdkVersion": "3",
     "enableMultiJS": false,
-    "targetPlatforms": ["aplite", "basalt", "chalk", "diorite", "emery", "gabbro"],
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "flint",
+      "emery",
+      "gabbro"
+    ],
     "watchapp": {
       "watchface": false
     },

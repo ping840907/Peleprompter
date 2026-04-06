@@ -190,11 +190,11 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
     graphics_fill_rect(ctx, bounds, 0, GCornerNone);
 
     if (s_flat_text && s_flat_text_len > 0) {
-        // 繪製文字 (使用負的 y 偏移來實現捲動)
+        // 繪製文字 (使用負的 y 偏移來實現捲動，並加上所有平台的頂部安全留白)
         graphics_context_set_text_color(ctx, GColorWhite);
         GRect draw_rect = GRect(
             text_bounds.origin.x,
-            text_bounds.origin.y - s_scroll_offset_px,
+            text_bounds.origin.y + EXTRA_SCROLL_PADDING - s_scroll_offset_px,
             text_bounds.size.w,
             s_total_content_height + bounds.size.h  // 額外空間確保能完整顯示
         );
@@ -248,9 +248,10 @@ static void auto_scroll_tick(void *data) {
 
     if (!s_auto_scroll_active || s_manual_pause_active) return;
 
-    // 計算最大可捲動偏移量 (依據文字區塊的實際高度)
+    // 計算最大可捲動偏移量 (加上頂部與底部的閱讀空白區域)
     GRect text_bounds = get_text_bounds();
-    int32_t max_offset = s_total_content_height - text_bounds.size.h;
+    int32_t effective_content_height = s_total_content_height + EXTRA_SCROLL_PADDING * 2;
+    int32_t max_offset = effective_content_height - text_bounds.size.h;
     if (max_offset < 0) max_offset = 0;
 
     if (s_scroll_offset_px < max_offset) {
@@ -280,13 +281,9 @@ static void auto_scroll_tick(void *data) {
             check_prefetch();
 
             if (!s_bt_connected) {
-#if ENABLE_MOCK_MODE
-                // Mock Mode 啟用時，不顯示斷線警告
-#else
                 // 離線且緩衝區已到底 → 顯示斷線警告
                 s_show_disconnect_warning = true;
                 layer_mark_dirty(s_canvas_layer);
-#endif
             }
             // 不排程下一次捲動，等收到新區塊後由 on_text_chunk_received 恢復
         }
@@ -375,10 +372,10 @@ static void manual_anim_tick(void *data) {
     }
 }
 
-/** 執行手動捲動 */
 static void do_manual_scroll(int32_t delta_px) {
     GRect text_bounds = get_text_bounds();
-    int32_t max_offset = s_total_content_height - text_bounds.size.h;
+    int32_t effective_content_height = s_total_content_height + EXTRA_SCROLL_PADDING * 2;
+    int32_t max_offset = effective_content_height - text_bounds.size.h;
     if (max_offset < 0) max_offset = 0;
 
     // 初始化目標位置 (如果當前沒有動畫在進行)
@@ -409,16 +406,8 @@ static void up_short_click(ClickRecognizerRef recognizer, void *context) {
     do_manual_scroll(-MANUAL_SCROLL_SHORT_PX);
 }
 
-static void up_long_click(ClickRecognizerRef recognizer, void *context) {
-    do_manual_scroll(-MANUAL_SCROLL_LONG_PX);
-}
-
 static void down_short_click(ClickRecognizerRef recognizer, void *context) {
     do_manual_scroll(MANUAL_SCROLL_SHORT_PX);
-}
-
-static void down_long_click(ClickRecognizerRef recognizer, void *context) {
-    do_manual_scroll(MANUAL_SCROLL_LONG_PX);
 }
 
 static void select_short_click(ClickRecognizerRef recognizer, void *context) {
@@ -470,11 +459,9 @@ static void select_long_click(ClickRecognizerRef recognizer, void *context) {
 }
 
 static void click_config_provider(void *context) {
-    window_single_click_subscribe(BUTTON_ID_UP, up_short_click);
-    window_long_click_subscribe(BUTTON_ID_UP, 300, up_long_click, NULL);
-
-    window_single_click_subscribe(BUTTON_ID_DOWN, down_short_click);
-    window_long_click_subscribe(BUTTON_ID_DOWN, 300, down_long_click, NULL);
+    // 使用 repeating click 讓我們按住不放時能連續快速觸發短捲動
+    window_single_repeating_click_subscribe(BUTTON_ID_UP, 100, up_short_click);
+    window_single_repeating_click_subscribe(BUTTON_ID_DOWN, 100, down_short_click);
 
     window_single_click_subscribe(BUTTON_ID_SELECT, select_short_click);
     window_long_click_subscribe(BUTTON_ID_SELECT, 500, select_long_click, NULL);
@@ -605,12 +592,6 @@ static void on_connection_changed(bool connected) {
         // 如果緩衝區不完整，繼續預取
         check_prefetch();
     }
-#if ENABLE_MOCK_MODE
-    else {
-        // Mock 模式下，斷線也能載入假資料，因此嘗試預取
-        check_prefetch();
-    }
-#endif
     // 斷線時不立刻警告，允許繼續閱讀緩衝區中的文字
     // 只有在捲動到緩衝區盡頭時才顯示警告 (在 auto_scroll_tick 中處理)
 }

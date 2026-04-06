@@ -48,14 +48,30 @@ static int16_t menu_get_header_height(MenuLayer *menu_layer, uint16_t section_in
 
 static void menu_draw_header(GContext *ctx, const Layer *cell_layer,
                              uint16_t section_index, void *data) {
-    switch (section_index) {
-        case SECTION_SPEED:
-            menu_cell_basic_header_draw(ctx, cell_layer, "Scroll Speed");
-            break;
-        case SECTION_SIZE:
-            menu_cell_basic_header_draw(ctx, cell_layer, "Text Size");
-            break;
-    }
+    const char *title = (section_index == SECTION_SPEED) ? "Scroll Speed" : "Text Size";
+
+    GRect bounds = layer_get_bounds(cell_layer);
+    
+    #if defined(PBL_COLOR)
+    graphics_context_set_fill_color(ctx, GColorLightGray);
+    #else
+    graphics_context_set_fill_color(ctx, GColorWhite);
+    #endif
+    
+    graphics_fill_rect(ctx, bounds, 0, GCornerNone);
+    graphics_context_set_text_color(ctx, GColorBlack);
+    
+    // 強制設定寬度為螢幕寬度，忽略 MenuLayer 自帶的縮進，確保絕對置中
+    #if defined(PBL_ROUND)
+    int16_t screen_width = 180;
+    #else
+    int16_t screen_width = bounds.size.w > 0 ? bounds.size.w : 144;
+    #endif
+    
+    GRect text_bounds = GRect(0, bounds.origin.y - 2, screen_width, bounds.size.h + 4);
+
+    graphics_draw_text(ctx, title, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                       text_bounds, GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
 }
 
 static void menu_draw_row(GContext *ctx, const Layer *cell_layer,

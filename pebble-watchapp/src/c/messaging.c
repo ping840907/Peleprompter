@@ -4,6 +4,7 @@
  * 處理手錶與 Android 手機之間的雙向通訊。
  */
 
+#include "constants.h" // CHUNK_SIZE
 #include "messaging.h"
 #include <string.h>
 #include <stdlib.h>
@@ -21,43 +22,6 @@ static bool s_is_sending = false;      // 防止重複發送
 // 重試佇列 (簡易實作：只記住最後一次失敗的請求)
 static bool s_retry_pending = false;
 static int32_t s_retry_offset = 0;
-
-#include "constants.h" // CHUNK_SIZE & ENABLE_MOCK_MODE
-
-#if ENABLE_MOCK_MODE
-// ============================================================
-// Mock Mode (離線測試用)
-// ============================================================
-static const char *s_mock_text = "Peleprompter Offline Test Mode.\n\n"
-"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.\n\n"
-"Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt. Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem.\n\n"
-"At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium voluptatum deleniti atque corrupti quos dolores et quas molestias excepturi sint occaecati cupiditate non provident, similique sunt in culpa qui officia deserunt mollitia animi, id est laborum et dolorum fuga.\n\n"
-"End of mock text.";
-
-static void mock_text_timer_callback(void *data) {
-    int32_t offset = (int32_t)(uintptr_t)data;
-    if (!s_text_callback) return;
-
-    int32_t mock_len = (int32_t)strlen(s_mock_text);
-    if (offset >= mock_len) {
-        s_text_callback(offset, "", 0); // EOF
-        return;
-    }
-
-    int32_t send_len = CHUNK_SIZE;
-    if (offset + send_len > mock_len) {
-        send_len = mock_len - offset;
-    }
-
-    char *buf = malloc(send_len + 1);
-    if (!buf) return;
-    strncpy(buf, s_mock_text + offset, send_len);
-    buf[send_len] = '\0';
-
-    s_text_callback(offset, buf, send_len);
-    free(buf);
-}
-#endif
 
 // ============================================================
 // 內部：處理收到的訊息
@@ -184,11 +148,6 @@ void messaging_deinit(void) {
 }
 
 void messaging_request_text(int32_t offset) {
-#if ENABLE_MOCK_MODE
-    // 無視藍牙連線狀態，一律模擬網路延遲後回傳假資料
-    app_timer_register(300, mock_text_timer_callback, (void *)(uintptr_t)offset);
-    return;
-#endif
 
     if (s_is_sending) {
         // 佇列這個請求，等目前的發送完成
