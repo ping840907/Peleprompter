@@ -1,6 +1,7 @@
 #
 # Peleprompter Pebble Watchapp Build Script
 #
+import os
 
 top = '.'
 out = 'build'
