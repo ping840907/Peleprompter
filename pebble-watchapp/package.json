@@ -11,7 +11,7 @@
     "displayName": "Peleprompter",
     "uuid": "1ced8e88-c6d6-476d-8f55-dc51edf6d9a7",
     "sdkVersion": "3",
-    "enableMultiJS": false,
+    "enableMultiJS": true,
     "targetPlatforms": [
       "aplite",
       "basalt",
