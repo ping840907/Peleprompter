@@ -10,6 +10,23 @@
 #include "constants.h"
 
 // ============================================================
+// 環形緩衝區容量（此模組已由圖片管理員取代，保留供參考）
+// ============================================================
+#if defined(PBL_PLATFORM_APLITE)
+  #define RING_BUFFER_CAPACITY  1536
+  #define CHUNK_SIZE            200
+  #define PREFETCH_SCREEN_COUNT 2
+#elif defined(PBL_PLATFORM_CHALK) || defined(PBL_PLATFORM_GABBRO)
+  #define RING_BUFFER_CAPACITY  4096
+  #define CHUNK_SIZE            512
+  #define PREFETCH_SCREEN_COUNT 3
+#else
+  #define RING_BUFFER_CAPACITY  5120
+  #define CHUNK_SIZE            512
+  #define PREFETCH_SCREEN_COUNT 3
+#endif
+
+// ============================================================
 // 區塊節點結構
 // ============================================================
 typedef struct TextChunkNode {

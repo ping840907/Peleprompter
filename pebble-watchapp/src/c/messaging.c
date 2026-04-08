@@ -1,10 +1,10 @@
 /**
- * messaging.c - AppMessage 通訊模組實作
+ * messaging.c - AppMessage 通訊模組實作（圖片模式）
  *
  * 處理手錶與 Android 手機之間的雙向通訊。
  */
 
-#include "constants.h" // CHUNK_SIZE
+#include "constants.h"
 #include "messaging.h"
 #include <string.h>
 #include <stdlib.h>
@@ -12,50 +12,73 @@
 // ============================================================
 // 私有狀態
 // ============================================================
-static TextChunkReceivedCallback s_text_callback = NULL;
-static SettingsSyncCallback s_settings_callback = NULL;
-static ConnectionChangeCallback s_conn_callback = NULL;
+static ImagesInitCallback     s_init_callback     = NULL;
+static ImageChunkCallback     s_chunk_callback    = NULL;
+static SettingsSyncCallback   s_settings_callback = NULL;
+static ConnectionChangeCallback s_conn_callback   = NULL;
 
 static bool s_is_connected = false;
-static bool s_is_sending = false;      // 防止重複發送
+static bool s_is_sending   = false;   // Outbox 使用鎖，防止重複發送
 
-// 重試佇列 (簡易實作：只記住最後一次失敗的請求)
-static bool s_retry_pending = false;
-static int32_t s_retry_offset = 0;
+// 重試佇列：記錄最後一次失敗的請求頁碼
+static bool    s_retry_pending  = false;
+static int32_t s_retry_page_num = 0;
 
 // ============================================================
 // 內部：處理收到的訊息
 // ============================================================
 static void inbox_received_handler(DictionaryIterator *iterator, void *context) {
-    // 讀取指令類型
     Tuple *cmd_tuple = dict_find(iterator, KEY_COMMAND);
     if (!cmd_tuple) return;
 
     int32_t command = cmd_tuple->value->int32;
 
     switch (command) {
-        case CMD_SEND_TEXT: {
-            // 手機回傳文字區塊
-            Tuple *offset_tuple = dict_find(iterator, KEY_TEXT_OFFSET);
-            Tuple *text_tuple = dict_find(iterator, KEY_TEXT_CHUNK);
 
-            if (offset_tuple && text_tuple && s_text_callback) {
-                int32_t offset = offset_tuple->value->int32;
-                const char *text = text_tuple->value->cstring;
-                int32_t len = (int32_t)strlen(text);
-                s_text_callback(offset, text, len);
+        case CMD_INIT_IMAGES: {
+            // 手機回傳圖片初始化資訊
+            Tuple *pages_t  = dict_find(iterator, KEY_TOTAL_PAGES);
+            Tuple *width_t  = dict_find(iterator, KEY_WATCH_WIDTH);
+            Tuple *height_t = dict_find(iterator, KEY_WATCH_HEIGHT);
+
+            if (pages_t && width_t && height_t && s_init_callback) {
+                int32_t total_pages  = pages_t->value->int32;
+                int32_t page_width   = width_t->value->int32;
+                int32_t page_height  = height_t->value->int32;
+                APP_LOG(APP_LOG_LEVEL_INFO,
+                        "收到 INIT_IMAGES: %ld 頁, %ldx%ld",
+                        (long)total_pages, (long)page_width, (long)page_height);
+                s_init_callback(total_pages, page_width, page_height);
+            }
+            break;
+        }
+
+        case CMD_SEND_IMAGE_CHUNK: {
+            // 手機回傳圖片區塊
+            Tuple *page_t   = dict_find(iterator, KEY_PAGE_NUM);
+            Tuple *cidx_t   = dict_find(iterator, KEY_CHUNK_INDEX);
+            Tuple *ctot_t   = dict_find(iterator, KEY_TOTAL_CHUNKS);
+            Tuple *data_t   = dict_find(iterator, KEY_IMAGE_DATA);
+
+            if (page_t && cidx_t && ctot_t && data_t && s_chunk_callback) {
+                int32_t page_num     = page_t->value->int32;
+                int32_t chunk_idx    = cidx_t->value->int32;
+                int32_t total_chunks = ctot_t->value->int32;
+                const uint8_t *data  = data_t->value->data;
+                int32_t data_len     = (int32_t)data_t->length;
+
+                s_chunk_callback(page_num, chunk_idx, total_chunks, data, data_len);
             }
             break;
         }
 
         case CMD_SYNC_SETTINGS: {
-            // 手機推送設定
-            Tuple *speed_tuple = dict_find(iterator, KEY_SCROLL_SPEED);
-            Tuple *size_tuple = dict_find(iterator, KEY_TEXT_SIZE);
+            Tuple *speed_t = dict_find(iterator, KEY_SCROLL_SPEED);
+            Tuple *size_t  = dict_find(iterator, KEY_TEXT_SIZE);
 
             if (s_settings_callback) {
-                int32_t speed = speed_tuple ? speed_tuple->value->int32 : -1;
-                int32_t size = size_tuple ? size_tuple->value->int32 : -1;
+                int32_t speed = speed_t ? speed_t->value->int32 : -1;
+                int32_t size  = size_t  ? size_t->value->int32  : -1;
                 s_settings_callback(speed, size);
             }
             break;
@@ -77,10 +100,9 @@ static void inbox_dropped_handler(AppMessageResult reason, void *context) {
 static void outbox_sent_handler(DictionaryIterator *iterator, void *context) {
     s_is_sending = false;
 
-    // 如果有待重試的請求，現在送出
     if (s_retry_pending) {
         s_retry_pending = false;
-        messaging_request_text(s_retry_offset);
+        messaging_request_page(s_retry_page_num);
     }
 }
 
@@ -89,14 +111,10 @@ static void outbox_failed_handler(DictionaryIterator *iterator,
     APP_LOG(APP_LOG_LEVEL_ERROR, "發送失敗: %d", (int)reason);
     s_is_sending = false;
 
-    // 如果已有待重試的偏移量且未超過重試上限，延遲重試
     if (s_retry_pending) {
-        // retry_pending 已由先前的 messaging_request_text 設定
-        // 這裡不清除它，讓 outbox_sent_handler 在下次成功時處理
-        // 但也不能無限重試，所以透過 s_retry_pending 本身限制為一次
-        int32_t offset_to_retry = s_retry_offset;
+        int32_t page_to_retry = s_retry_page_num;
         s_retry_pending = false;
-        messaging_request_text(offset_to_retry);
+        messaging_request_page(page_to_retry);
     }
 }
 
@@ -116,26 +134,25 @@ static void connection_handler(bool connected) {
 // 公開 API
 // ============================================================
 
-void messaging_init(TextChunkReceivedCallback text_cb,
+void messaging_init(ImagesInitCallback init_cb,
+                    ImageChunkCallback chunk_cb,
                     SettingsSyncCallback settings_cb,
                     ConnectionChangeCallback conn_cb) {
-    s_text_callback = text_cb;
+    s_init_callback     = init_cb;
+    s_chunk_callback    = chunk_cb;
     s_settings_callback = settings_cb;
-    s_conn_callback = conn_cb;
+    s_conn_callback     = conn_cb;
 
-    // 註冊 AppMessage 回呼
     app_message_register_inbox_received(inbox_received_handler);
     app_message_register_inbox_dropped(inbox_dropped_handler);
     app_message_register_outbox_sent(outbox_sent_handler);
     app_message_register_outbox_failed(outbox_failed_handler);
 
-    // 開啟 AppMessage
     AppMessageResult result = app_message_open(INBOX_SIZE, OUTBOX_SIZE);
     if (result != APP_MSG_OK) {
         APP_LOG(APP_LOG_LEVEL_ERROR, "AppMessage 開啟失敗: %d", (int)result);
     }
 
-    // 註冊藍牙連線監聽
     connection_service_subscribe((ConnectionHandlers){
         .pebble_app_connection_handler = connection_handler
     });
@@ -147,17 +164,46 @@ void messaging_deinit(void) {
     app_message_deregister_callbacks();
 }
 
-void messaging_request_text(int32_t offset) {
-
+void messaging_request_init(int32_t watch_width,
+                             int32_t watch_height,
+                             int32_t text_size) {
     if (s_is_sending) {
-        // 佇列這個請求，等目前的發送完成
-        s_retry_pending = true;
-        s_retry_offset = offset;
+        // Outbox 忙碌，排入重試（以 page 0 作為哨兵，實際由 init 觸發）
+        s_retry_pending  = true;
+        s_retry_page_num = -1;  // 特殊值：代表重試 init
+        return;
+    }
+    if (!s_is_connected) {
+        APP_LOG(APP_LOG_LEVEL_WARNING, "藍牙未連線，無法發送初始化請求");
         return;
     }
 
+    DictionaryIterator *iter;
+    AppMessageResult result = app_message_outbox_begin(&iter);
+    if (result != APP_MSG_OK) return;
+
+    dict_write_int32(iter, KEY_COMMAND,      CMD_REQUEST_TEXT);
+    dict_write_int32(iter, KEY_WATCH_WIDTH,  watch_width);
+    dict_write_int32(iter, KEY_WATCH_HEIGHT, watch_height);
+    dict_write_int32(iter, KEY_TEXT_SIZE,    text_size);
+
+    result = app_message_outbox_send();
+    if (result == APP_MSG_OK) {
+        s_is_sending = true;
+        APP_LOG(APP_LOG_LEVEL_INFO,
+                "發送初始化請求: %ldx%ld, size=%ld",
+                (long)watch_width, (long)watch_height, (long)text_size);
+    }
+}
+
+void messaging_request_page(int32_t page_num) {
+    if (s_is_sending) {
+        s_retry_pending  = true;
+        s_retry_page_num = page_num;
+        return;
+    }
     if (!s_is_connected) {
-        APP_LOG(APP_LOG_LEVEL_WARNING, "藍牙未連線，無法請求文字");
+        APP_LOG(APP_LOG_LEVEL_WARNING, "藍牙未連線，無法請求頁面 %ld", (long)page_num);
         return;
     }
 
@@ -168,37 +214,28 @@ void messaging_request_text(int32_t offset) {
         return;
     }
 
-    dict_write_int32(iter, KEY_COMMAND, CMD_REQUEST_TEXT);
-    dict_write_int32(iter, KEY_TEXT_OFFSET, offset);
+    dict_write_int32(iter, KEY_COMMAND,  CMD_REQUEST_PAGE);
+    dict_write_int32(iter, KEY_PAGE_NUM, page_num);
 
     result = app_message_outbox_send();
     if (result == APP_MSG_OK) {
         s_is_sending = true;
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "已請求頁面 %ld", (long)page_num);
     } else {
         APP_LOG(APP_LOG_LEVEL_ERROR, "outbox_send 失敗: %d", (int)result);
     }
 }
 
 void messaging_send_settings(int32_t scroll_speed, int32_t text_size) {
-    if (!s_is_connected) return;
-
-    if (s_is_sending) {
-        APP_LOG(APP_LOG_LEVEL_WARNING, "Outbox 忙碌中，延遲發送設定");
-        // Outbox 正在使用中，跳過此次同步
-        // 使用者可從設定視窗再次觸發
-        return;
-    }
+    if (!s_is_connected || s_is_sending) return;
 
     DictionaryIterator *iter;
     AppMessageResult result = app_message_outbox_begin(&iter);
-    if (result != APP_MSG_OK) {
-        APP_LOG(APP_LOG_LEVEL_ERROR, "設定同步 outbox_begin 失敗: %d", (int)result);
-        return;
-    }
+    if (result != APP_MSG_OK) return;
 
-    dict_write_int32(iter, KEY_COMMAND, CMD_SYNC_SETTINGS);
+    dict_write_int32(iter, KEY_COMMAND,      CMD_SYNC_SETTINGS);
     dict_write_int32(iter, KEY_SCROLL_SPEED, scroll_speed);
-    dict_write_int32(iter, KEY_TEXT_SIZE, text_size);
+    dict_write_int32(iter, KEY_TEXT_SIZE,    text_size);
 
     result = app_message_outbox_send();
     if (result == APP_MSG_OK) {

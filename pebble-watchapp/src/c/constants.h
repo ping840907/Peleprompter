@@ -1,6 +1,6 @@
 /**
  * constants.h - Peleprompter 共用常數定義
- * 
+ *
  * 定義所有通訊協定鍵值、UI 參數、緩衝區大小等
  */
 #pragma once
@@ -11,17 +11,28 @@
 // 通訊協定鍵值 (與 Android 端一致)
 // ============================================================
 #define KEY_COMMAND        0   // (Int) 指令類型
-#define KEY_TEXT_OFFSET    1   // (Int) 字元偏移量
-#define KEY_TEXT_CHUNK     2   // (String) 文字內容
+#define KEY_TEXT_OFFSET    1   // (Int) 字元偏移量 (保留相容)
+#define KEY_TEXT_CHUNK     2   // (String) 文字內容 (保留相容)
 #define KEY_SCROLL_SPEED   3   // (Int) 捲動速度 1-6
 #define KEY_TEXT_SIZE      4   // (Int) 文字大小 0=小, 1=中, 2=大
+// 圖片模式新增鍵值
+#define KEY_PAGE_NUM       5   // (Int) 頁碼 (0-indexed)
+#define KEY_CHUNK_INDEX    6   // (Int) 此頁圖片資料的區塊索引
+#define KEY_TOTAL_CHUNKS   7   // (Int) 此頁共幾個區塊
+#define KEY_IMAGE_DATA     8   // (Bytes) 圖片原始位元組
+#define KEY_TOTAL_PAGES    9   // (Int) 文件總頁數
+#define KEY_WATCH_WIDTH    10  // (Int) 手錶螢幕寬度 (pixels)
+#define KEY_WATCH_HEIGHT   11  // (Int) 手錶螢幕高度 (pixels)
 
 // ============================================================
 // 指令類型
 // ============================================================
-#define CMD_REQUEST_TEXT    0  // 手錶向手機請求文字區塊
-#define CMD_SEND_TEXT      1  // 手機回傳文字區塊
-#define CMD_SYNC_SETTINGS  2  // 同步設定 (速度/字型大小)
+#define CMD_REQUEST_TEXT    0  // 手錶向手機請求初始化 (含螢幕尺寸)
+#define CMD_SEND_TEXT       1  // 保留相容
+#define CMD_SYNC_SETTINGS   2  // 同步設定 (速度/字型大小)
+#define CMD_INIT_IMAGES     3  // 手機→手錶：初始化圖片模式 (總頁數+尺寸)
+#define CMD_REQUEST_PAGE    4  // 手錶→手機：請求第 N 頁圖片
+#define CMD_SEND_IMAGE_CHUNK 5 // 手機→手錶：傳送圖片資料區塊
 
 // ============================================================
 // 文字大小列舉
@@ -33,30 +44,26 @@ typedef enum {
 } TextSizeLevel;
 
 // ============================================================
-// 環形緩衝區設定
+// 圖片模式設定
 // ============================================================
-// 注意：實際記憶體使用量 ≈ RING_BUFFER_CAPACITY × 2，因為
-// ring buffer 節點持有文字，且 refresh_flat_text() 會產生一份
-// 連續的扁平化副本供繪圖引擎使用。因此下方容量已預留此開銷。
-//
-// Aplite (Pebble Original) 記憶體極度有限（堆積約 24KB）
+// 每個圖片區塊最大位元組數 (需留出 AppMessage header 空間)
+#define IMAGE_CHUNK_DATA_SIZE  1900
+
+// 每個平台最多快取幾頁圖片
+// Aplite 堆積約 24KB，每頁 1-bit 圖片約 3KB，最多快取 2 頁
+// 彩色平台堆積較大，可快取 3 頁
 #if defined(PBL_PLATFORM_APLITE)
-  #define RING_BUFFER_CAPACITY     1536   // 節點記憶體上限 (實際佔用 ≈ 3KB 含副本)
-  #define CHUNK_SIZE               200    // 每次請求的文字區塊大小
-  #define PREFETCH_SCREEN_COUNT    2      // 預載 2 個螢幕高度
-#elif defined(PBL_PLATFORM_CHALK) || defined(PBL_PLATFORM_GABBRO)
-  // 圓形螢幕可用面積較小，但記憶體較充裕
-  #define RING_BUFFER_CAPACITY     4096   // 節點記憶體上限 (實際佔用 ≈ 8KB 含副本)
-  #define CHUNK_SIZE               512    // 每次請求的文字區塊大小
-  #define PREFETCH_SCREEN_COUNT    3      // 預載 3 個螢幕高度
+  #define MAX_PAGES_CACHED 2
 #else
-  // Basalt, Diorite, Flint, Emery
-  #define RING_BUFFER_CAPACITY     5120   // 節點記憶體上限 (實際佔用 ≈ 10KB 含副本)
-  #define CHUNK_SIZE               512    // 每次請求的文字區塊大小
-  #define PREFETCH_SCREEN_COUNT    3      // 預載 3 個螢幕高度
+  #define MAX_PAGES_CACHED 3
 #endif
 
+// 當距下一頁邊界剩餘像素低於此門檻時，預取下一頁
+// 等同於 2 個螢幕高度的讀取緩衝
+#define IMAGE_PREFETCH_THRESHOLD_PX  336   // 約 2 × 168px
+
 // AppMessage 收發緩衝區大小
+// 收件匣需足夠容納一個完整的圖片區塊加上 header
 #define INBOX_SIZE   2048
 #define OUTBOX_SIZE  256
 
@@ -68,8 +75,6 @@ typedef enum {
 #define SCROLL_SPEED_DEFAULT   3
 
 // 自動捲動計時器間隔 (毫秒) - 依速度等級對應
-// 等級 1 最慢，等級 6 最快
-// 定義於 main.c，此處僅宣告
 extern const uint16_t SCROLL_INTERVALS_MS[7];
 
 // 每次捲動的像素數
@@ -81,24 +86,6 @@ extern const uint16_t SCROLL_INTERVALS_MS[7];
 // 手動捲動每次跳動的像素數
 #define MANUAL_SCROLL_SHORT_PX 60
 #define MANUAL_SCROLL_LONG_PX  120
-
-// ============================================================
-// 圓形螢幕邊距 (Chalk / Gabbro)
-// ============================================================
-#if defined(PBL_ROUND)
-  #define ROUND_HORIZONTAL_INSET 18
-  #define ROUND_VERTICAL_INSET   10
-#else
-  #define ROUND_HORIZONTAL_INSET 0
-  #define ROUND_VERTICAL_INSET   0
-#endif
-
-// 所有平台通用的頂部與底部額外留白，用於閱讀緩衝與首尾提示
-#define EXTRA_SCROLL_PADDING 50
-
-// 一般螢幕邊距
-#define TEXT_MARGIN_H  4
-#define TEXT_MARGIN_V  2
 
 // ============================================================
 // 持久化儲存鍵
