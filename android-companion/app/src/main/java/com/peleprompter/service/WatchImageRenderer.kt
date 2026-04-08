@@ -65,6 +65,14 @@ class WatchImageRenderer(
     // 每行的 stride (位元組數)
     val rowStride: Int = (watchWidth + 7) / 8
 
+    /**
+     * encodeTo1Bit 的列像素暫存緩衝區。
+     * 提升為類別欄位，避免每次渲染一頁就重新分配 IntArray(watchWidth)。
+     * watchWidth = 144–200，即 576–800 bytes，若放在 renderPage 區域變數
+     * 則每頁都會分配並等待 GC 回收，造成不必要的短命物件壓力。
+     */
+    private val rowPixelBuffer: IntArray = IntArray(watchWidth)
+
     // ============================================================
     // 公開 API
     // ============================================================
@@ -191,12 +199,12 @@ class WatchImageRenderer(
         val result = ByteArray(stride * height)  // 預設全 0（黑色）
 
         // 一次取一列像素以降低 getPixel 呼叫次數
-        val rowPixels = IntArray(width)
+        // rowPixelBuffer 為類別欄位，避免每頁重複分配 IntArray
         for (y in 0 until height) {
-            bitmap.getPixels(rowPixels, 0, width, 0, y, width, 1)
+            bitmap.getPixels(rowPixelBuffer, 0, width, 0, y, width, 1)
             val baseIndex = y * stride
             for (x in 0 until width) {
-                val pixel = rowPixels[x]
+                val pixel = rowPixelBuffer[x]
                 // 使用標準亮度公式（BT.601）
                 val r = (pixel shr 16) and 0xFF
                 val g = (pixel shr 8)  and 0xFF

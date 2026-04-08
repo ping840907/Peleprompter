@@ -41,7 +41,20 @@ class PebbleCommManager(
     private var currentDocument: TextDocument? = null
     private var renderer: WatchImageRenderer? = null
 
-    /** 已渲染頁面的快取（pageNum → 1-bit 位元組陣列） */
+    /**
+     * 已渲染頁面的快取（pageNum → 1-bit 位元組陣列）
+     *
+     * 每頁大小：Aplite ≈3KB, Chalk ≈4.1KB, Emery ≈5.7KB。
+     * 清除時機：
+     *  - setCurrentDocument()：切換文件時清除（pageCache.clear()）
+     *  - handleInitRequest()：尺寸改變時清除
+     *
+     * 為何不需要 LRU 上限：
+     * 手錶每次只需 2-3 頁，而 Android 端快取只在手錶主動 request 時才
+     * 增長。一部典型提詞稿 200 頁 × 6KB = 1.2MB，在 Android 堆積空間
+     * （通常 ≥192MB）中佔比極低，且頁面大小固定、配置方式一致，
+     * Android GC 的壓縮式收集器能有效消除小型 ByteArray 的碎片。
+     */
     private val pageCache: HashMap<Int, ByteArray> = HashMap()
 
     // ── PebbleKit 接收器 ─────────────────────────────────────────
