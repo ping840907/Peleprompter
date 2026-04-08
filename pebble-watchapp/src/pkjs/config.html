@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Peleprompter</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #121212;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      padding: 16px;
+      max-width: 480px;
+      margin: 0 auto;
+      font-size: 15px;
+      -webkit-text-size-adjust: 100%;
+    }
+
+    h2 {
+      color: #BB86FC;
+      font-size: 20px;
+      margin-bottom: 18px;
+      font-weight: 700;
+    }
+
+    .label {
+      display: block;
+      color: #b0b0b0;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+      margin-top: 16px;
+    }
+
+    textarea {
+      width: 100%;
+      height: 160px;
+      background: #1e1e1e;
+      border: 1px solid #333333;
+      border-radius: 8px;
+      color: #ffffff;
+      padding: 12px;
+      font-size: 14px;
+      line-height: 1.5;
+      resize: vertical;
+      -webkit-appearance: none;
+    }
+    textarea:focus { outline: none; border-color: #BB86FC; }
+    textarea::placeholder { color: #555555; }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 0;
+    }
+
+    .seg-btn {
+      flex: 1;
+      padding: 10px 4px;
+      background: #1e1e1e;
+      border: 1px solid #444444;
+      border-radius: 6px;
+      color: #ffffff;
+      font-size: 12px;
+      text-align: center;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      line-height: 1.4;
+    }
+    .seg-btn.active {
+      background: #BB86FC;
+      border-color: #BB86FC;
+      color: #000000;
+      font-weight: 600;
+    }
+
+    #btnRender {
+      display: block;
+      width: 100%;
+      margin-top: 20px;
+      padding: 14px;
+      background: #03DAC5;
+      border: none;
+      border-radius: 8px;
+      color: #000000;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #btnRender:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    #progressWrap {
+      margin-top: 12px;
+      display: none;
+    }
+    progress {
+      width: 100%;
+      height: 6px;
+      -webkit-appearance: none;
+      appearance: none;
+      border: none;
+      border-radius: 3px;
+      background: #333333;
+    }
+    progress::-webkit-progress-bar { background: #333333; border-radius: 3px; }
+    progress::-webkit-progress-value { background: #03DAC5; border-radius: 3px; }
+    progress::-moz-progress-bar { background: #03DAC5; border-radius: 3px; }
+
+    #status {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #888888;
+      min-height: 18px;
+      line-height: 1.4;
+    }
+    #status.warn  { color: #FFB74D; }
+    #status.error { color: #EF9A9A; }
+    #status.ok    { color: #81C784; }
+
+    canvas { display: none; }
+
+    .info-box {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-top: 12px;
+      font-size: 12px;
+      color: #888888;
+      display: none;
+    }
+    .info-box span { color: #BB86FC; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h2>&#x1F4FA; Peleprompter</h2>
+
+  <label class="label">Text Content</label>
+  <textarea id="txt" placeholder="Paste your script here..." oninput="onTextChange()"></textarea>
+
+  <label class="label">Platform</label>
+  <div class="btn-row" id="platRow">
+    <button class="seg-btn active" data-w="144" data-h="168" onclick="setPlatform(this)">Aplite / Basalt<br>144 &times; 168</button>
+    <button class="seg-btn"        data-w="180" data-h="180" onclick="setPlatform(this)">Chalk<br>180 &times; 180</button>
+    <button class="seg-btn"        data-w="200" data-h="228" onclick="setPlatform(this)">Emery<br>200 &times; 228</button>
+  </div>
+
+  <label class="label">Text Size</label>
+  <div class="btn-row" id="sizeRow">
+    <button class="seg-btn"        data-sz="0" onclick="setSize(this)">Small</button>
+    <button class="seg-btn active" data-sz="1" onclick="setSize(this)">Medium</button>
+    <button class="seg-btn"        data-sz="2" onclick="setSize(this)">Large</button>
+  </div>
+
+  <div class="info-box" id="infoBox">
+    Estimated <span id="estPages">?</span> pages &nbsp;&bull;&nbsp;
+    <span id="estKb">?</span> KB image data
+  </div>
+
+  <button id="btnRender" onclick="doRender()">Render &amp; Connect to Watch</button>
+
+  <div id="progressWrap">
+    <progress id="prog" max="100" value="0"></progress>
+  </div>
+  <div id="status">Enter your script above and tap Render.</div>
+
+  <canvas id="c"></canvas>
+
+  <script>
+  'use strict';
+
+  // ── Config ──────────────────────────────────────────────────────
+  var WW = 144, WH = 168, SZ = 1;
+  var PADDING    = 50;          // top + bottom padding baked into pages
+  var FONT_PX    = [14, 18, 22]; // small / medium / large
+  var MAX_PAGES  = 60;          // safety cap; warn above 40
+
+  // ── UI helpers ──────────────────────────────────────────────────
+  function setPlatform(btn) {
+    document.querySelectorAll('#platRow .seg-btn').forEach(function(b) { b.className = 'seg-btn'; });
+    btn.className = 'seg-btn active';
+    WW = parseInt(btn.getAttribute('data-w'));
+    WH = parseInt(btn.getAttribute('data-h'));
+    updateEstimate();
+  }
+
+  function setSize(btn) {
+    document.querySelectorAll('#sizeRow .seg-btn').forEach(function(b) { b.className = 'seg-btn'; });
+    btn.className = 'seg-btn active';
+    SZ = parseInt(btn.getAttribute('data-sz'));
+    updateEstimate();
+  }
+
+  function setStatus(msg, cls) {
+    var el = document.getElementById('status');
+    el.textContent = msg;
+    el.className   = cls || '';
+  }
+
+  function onTextChange() { updateEstimate(); }
+
+  function updateEstimate() {
+    var text = document.getElementById('txt').value.trim();
+    if (!text) { document.getElementById('infoBox').style.display = 'none'; return; }
+
+    var canvas = document.getElementById('c');
+    canvas.width = WW; canvas.height = WH;
+    var ctx = canvas.getContext('2d');
+    var fpx = FONT_PX[SZ];
+    ctx.font = fpx + 'px sans-serif';
+    var lines   = wrapText(ctx, text, WW - 4);
+    var lh      = Math.floor(fpx * 1.4);
+    var totalH  = PADDING + lines.length * lh + PADDING;
+    var n       = Math.max(1, Math.ceil(totalH / WH));
+    var stride  = Math.ceil(WW / 8);
+    var kb      = Math.round(n * stride * WH / 1024);
+
+    document.getElementById('estPages').textContent = n;
+    document.getElementById('estKb').textContent    = kb;
+    document.getElementById('infoBox').style.display = 'block';
+  }
+
+  // ── Text rendering ──────────────────────────────────────────────
+  function wrapText(ctx, text, maxW) {
+    var lines  = [];
+    var paras  = text.split('\n');
+    for (var p = 0; p < paras.length; p++) {
+      var para = paras[p];
+      if (!para.trim()) { lines.push(''); continue; }
+      var words = para.split(' ');
+      var line  = '';
+      for (var i = 0; i < words.length; i++) {
+        var test = line ? line + ' ' + words[i] : words[i];
+        if (ctx.measureText(test).width <= maxW) {
+          line = test;
+        } else {
+          if (line) lines.push(line);
+          line = words[i];
+        }
+      }
+      if (line) lines.push(line);
+    }
+    return lines;
+  }
+
+  // ── 1-bit encoding ──────────────────────────────────────────────
+  // Matches WatchImageRenderer.kt: BT.601 luminance > 64 = white, MSB-first.
+  function encode1Bit(imageData, w, h) {
+    var stride = Math.ceil(w / 8);
+    var result = new Uint8Array(stride * h);
+    var d      = imageData.data;
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        var i    = (y * w + x) * 4;
+        var luma = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        if (luma > 64) {
+          result[y * stride + (x >> 3)] |= (0x80 >> (x & 7));
+        }
+      }
+    }
+    return result;
+  }
+
+  function toBase64(bytes) {
+    var s = '';
+    // Use chunk approach to avoid call stack overflow on large arrays
+    var CHUNK = 8192;
+    for (var i = 0; i < bytes.length; i += CHUNK) {
+      s += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    }
+    return btoa(s);
+  }
+
+  // ── Render all pages (async, one page per tick) ─────────────────
+  function doRender() {
+    var text = document.getElementById('txt').value.trim();
+    if (!text) { setStatus('Please enter some text first.', 'warn'); return; }
+
+    var btn  = document.getElementById('btnRender');
+    var prog = document.getElementById('prog');
+    btn.disabled = true;
+    document.getElementById('progressWrap').style.display = 'block';
+    prog.value = 0;
+
+    var canvas = document.getElementById('c');
+    canvas.width  = WW;
+    canvas.height = WH;
+    var ctx = canvas.getContext('2d');
+
+    var fpx   = FONT_PX[SZ];
+    var lh    = Math.floor(fpx * 1.4);
+    ctx.font  = fpx + 'px sans-serif';
+    var lines = wrapText(ctx, text, WW - 4);
+
+    var totalH   = PADDING + lines.length * lh + PADDING;
+    var numPages = Math.max(1, Math.min(MAX_PAGES, Math.ceil(totalH / WH)));
+
+    if (Math.ceil(totalH / WH) > MAX_PAGES) {
+      setStatus('Text truncated to ' + MAX_PAGES + ' pages. Consider splitting into shorter segments.', 'warn');
+    } else {
+      setStatus('Rendering ' + numPages + ' page' + (numPages > 1 ? 's' : '') + '…');
+    }
+
+    var pages  = [];
+    var pageN  = 0;
+
+    function renderNext() {
+      if (pageN >= numPages) {
+        finish(pages, numPages);
+        return;
+      }
+
+      // Draw page
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, WW, WH);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = fpx + 'px sans-serif';
+
+      // Offset: PADDING - pageN * WH  (same as Android WatchImageRenderer)
+      var offsetY = PADDING - pageN * WH;
+      for (var li = 0; li < lines.length; li++) {
+        var y = offsetY + li * lh + fpx;
+        if (y > WH + lh) break;
+        if (y + lh < 0)  continue;
+        ctx.fillText(lines[li], 2, y);
+      }
+
+      var imageData = ctx.getImageData(0, 0, WW, WH);
+      pages.push(toBase64(encode1Bit(imageData, WW, WH)));
+
+      prog.value = Math.round((pageN + 1) / numPages * 100);
+      setStatus('Rendering page ' + (pageN + 1) + ' / ' + numPages + '…');
+      pageN++;
+
+      // Yield to browser so UI stays responsive
+      setTimeout(renderNext, 0);
+    }
+
+    renderNext();
+  }
+
+  function finish(pages, n) {
+    setStatus('Done! ' + n + ' page' + (n > 1 ? 's' : '') + ' rendered. Sending to watch…', 'ok');
+    var result = {
+      pages:      pages,
+      totalPages: n,
+      watchWidth: WW,
+      watchHeight:WH,
+      textSize:   SZ
+    };
+    try {
+      document.location = 'pebblejs://close#' + encodeURIComponent(JSON.stringify(result));
+    } catch (e) {
+      setStatus('Error sending to watch: ' + e.message, 'error');
+      document.getElementById('btnRender').disabled = false;
+    }
+  }
+  </script>
+</body>
+</html>
