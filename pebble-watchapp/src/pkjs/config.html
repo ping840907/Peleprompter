@@ -147,10 +147,10 @@
 
   <label class="label">Platform</label>
   <div class="btn-row" id="platRow">
-    <button class="seg-btn active" data-w="144" data-h="168" onclick="setPlatform(this)">Aplite / Basalt<br>144 &times; 168</button>
-    <button class="seg-btn"        data-w="180" data-h="180" onclick="setPlatform(this)">Chalk<br>180 &times; 180</button>
-    <button class="seg-btn"        data-w="200" data-h="228" onclick="setPlatform(this)">Emery<br>200 &times; 228</button>
-    <button class="seg-btn"        data-w="260" data-h="260" onclick="setPlatform(this)">Gabbro<br>260 &times; 260</button>
+    <button class="seg-btn active" data-w="144" data-h="168" data-hpad="2"  onclick="setPlatform(this)">Aplite / Basalt<br>144 &times; 168</button>
+    <button class="seg-btn"        data-w="180" data-h="180" data-hpad="20" onclick="setPlatform(this)">Chalk<br>180 &times; 180</button>
+    <button class="seg-btn"        data-w="200" data-h="228" data-hpad="2"  onclick="setPlatform(this)">Emery<br>200 &times; 228</button>
+    <button class="seg-btn"        data-w="260" data-h="260" data-hpad="30" onclick="setPlatform(this)">Gabbro<br>260 &times; 260</button>
   </div>
 
   <label class="label">Text Size</label>
@@ -178,7 +178,7 @@
   'use strict';
 
   // ── Config ──────────────────────────────────────────────────────
-  var WW = 144, WH = 168, SZ = 1;
+  var WW = 144, WH = 168, SZ = 1, HPAD = 2;
   var PADDING    = 50;          // top + bottom padding baked into pages
   var FONT_PX    = [14, 18, 22]; // small / medium / large
   var MAX_PAGES  = 60;          // safety cap; warn above 40
@@ -187,8 +187,9 @@
   function setPlatform(btn) {
     document.querySelectorAll('#platRow .seg-btn').forEach(function(b) { b.className = 'seg-btn'; });
     btn.className = 'seg-btn active';
-    WW = parseInt(btn.getAttribute('data-w'));
-    WH = parseInt(btn.getAttribute('data-h'));
+    WW   = parseInt(btn.getAttribute('data-w'));
+    WH   = parseInt(btn.getAttribute('data-h'));
+    HPAD = parseInt(btn.getAttribute('data-hpad'));
     updateEstimate();
   }
 
@@ -216,7 +217,7 @@
     var ctx = canvas.getContext('2d');
     var fpx = FONT_PX[SZ];
     ctx.font = fpx + 'px sans-serif';
-    var lines   = wrapText(ctx, text, WW - 4);
+    var lines   = wrapText(ctx, text, WW - HPAD * 2);
     var lh      = Math.floor(fpx * 1.4);
     var totalH  = PADDING + lines.length * lh + PADDING;
     var n       = Math.max(1, Math.ceil(totalH / WH));
@@ -298,7 +299,7 @@
     var fpx   = FONT_PX[SZ];
     var lh    = Math.floor(fpx * 1.4);
     ctx.font  = fpx + 'px sans-serif';
-    var lines = wrapText(ctx, text, WW - 4);
+    var lines = wrapText(ctx, text, WW - HPAD * 2);
 
     var totalH   = PADDING + lines.length * lh + PADDING;
     var numPages = Math.max(1, Math.min(MAX_PAGES, Math.ceil(totalH / WH)));
@@ -330,7 +331,7 @@
         var y = offsetY + li * lh + fpx;
         if (y > WH + lh) break;
         if (y + lh < 0)  continue;
-        ctx.fillText(lines[li], 2, y);
+        ctx.fillText(lines[li], HPAD, y);
       }
 
       var imageData = ctx.getImageData(0, 0, WW, WH);
