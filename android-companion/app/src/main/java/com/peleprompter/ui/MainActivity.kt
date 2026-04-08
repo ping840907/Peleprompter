@@ -139,6 +139,11 @@ class MainActivity : AppCompatActivity() {
             viewModel.pushToWatchFromBookmark()
         }
 
+        // 開啟 Watch Emulator
+        binding.btnOpenEmulator.setOnClickListener {
+            startActivity(android.content.Intent(this, WatchEmulatorActivity::class.java))
+        }
+
         // 捲動速度滑桿
         binding.sliderSpeed.addOnChangeListener(Slider.OnChangeListener { _, value, fromUser ->
             if (fromUser) {

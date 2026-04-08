@@ -51,5 +51,11 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".ui.WatchEmulatorActivity"
+            android:exported="false"
+            android:label="Watch Emulator"
+            android:parentActivityName=".ui.MainActivity" />
+
     </application>
 </manifest>

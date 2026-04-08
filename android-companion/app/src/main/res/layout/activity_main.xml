@@ -35,7 +35,17 @@
             android:text="Disconnected"
             android:textColor="#FF5252"
             android:textSize="12sp"
-            android:drawablePadding="4dp" />
+            android:drawablePadding="4dp"
+            android:layout_marginEnd="8dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnOpenEmulator"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Emulator"
+            android:textSize="11sp"
+            android:textColor="#BB86FC"
+            style="@style/Widget.Material3.Button.TextButton" />
     </LinearLayout>
 
     <ScrollView

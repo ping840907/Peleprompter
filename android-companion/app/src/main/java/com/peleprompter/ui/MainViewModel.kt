@@ -205,6 +205,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun setDocument(doc: TextDocument) {
         _currentDocument.value = doc
         commManager.setCurrentDocument(doc)
+        getApplication<PeleprompterApp>().currentDocument = doc
         _statusMessage.value = "Loaded: ${doc.title} (${doc.totalLength} chars)"
     }
 

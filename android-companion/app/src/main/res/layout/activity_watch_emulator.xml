@@ -1,0 +1,315 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  activity_watch_emulator.xml
+  上半部：手錶螢幕 + 控制按鍵（ScrollView）
+  下半部：協定日誌（RecyclerView）
+  以 guideline 50% 分割
+-->
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#121212">
+
+    <!-- 水平分割線，上方 50%，下方 50% -->
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/guideline50"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        app:layout_constraintGuide_percent="0.50" />
+
+    <!-- ════════════════════════════════════════════
+         上半部：控制區
+         ════════════════════════════════════════════ -->
+    <ScrollView
+        android:id="@+id/scrollControls"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/guideline50"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <!-- 平台選擇 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Platform:"
+                    android:textColor="#B0B0B0"
+                    android:textSize="13sp"
+                    android:paddingEnd="8dp" />
+
+                <Spinner
+                    android:id="@+id/spinnerPlatform"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:backgroundTint="#444444"
+                    android:spinnerMode="dropdown" />
+            </LinearLayout>
+
+            <!-- 文字大小 -->
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/toggleTextSize"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                app:singleSelection="true"
+                app:selectionRequired="true">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnEmuSizeSmall"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Small"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnEmuSizeMedium"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Medium"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnEmuSizeLarge"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Large"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp" />
+            </com.google.android.material.button.MaterialButtonToggleGroup>
+
+            <!-- 手錶螢幕 + 捲動按鍵（水平排列） -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp">
+
+                <!-- 手錶畫面（居中，最寬 240dp，長寬比由 View 自行計算） -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center">
+
+                    <com.peleprompter.ui.WatchScreenView
+                        android:id="@+id/watchScreen"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <!-- 右側按鍵 -->
+                <LinearLayout
+                    android:layout_width="56dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:paddingStart="6dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnScrollUp"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:text="▲"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="6dp"
+                        app:backgroundTint="#333333"
+                        android:textColor="#FFFFFF"
+                        style="@style/Widget.Material3.Button.IconButton" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSelect"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:text="SELECT&#10;(auto)"
+                        android:textSize="8sp"
+                        android:layout_marginBottom="6dp"
+                        app:backgroundTint="#555555"
+                        android:textColor="#FFFFFF"
+                        style="@style/Widget.Material3.Button.IconButton" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnScrollDown"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:text="▼"
+                        android:textSize="14sp"
+                        app:backgroundTint="#333333"
+                        android:textColor="#FFFFFF"
+                        style="@style/Widget.Material3.Button.IconButton" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- 捲動資訊 -->
+            <TextView
+                android:id="@+id/tvScrollInfo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="scroll: 0px | page 0/0"
+                android:textColor="#888888"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:layout_marginBottom="8dp" />
+
+            <!-- 捲動速度 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="6dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Speed "
+                    android:textColor="#B0B0B0"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/tvSpeedValue"
+                    android:layout_width="24dp"
+                    android:layout_height="wrap_content"
+                    android:text="3"
+                    android:textColor="#BB86FC"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/sliderSpeed"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:valueFrom="1"
+                    android:valueTo="6"
+                    android:stepSize="1"
+                    android:value="3"
+                    app:trackColorActive="#BB86FC"
+                    app:thumbColor="#BB86FC" />
+            </LinearLayout>
+
+            <!-- 連線控制 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnDisconnect"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Disconnect"
+                    android:layout_marginEnd="4dp"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:textColor="#FF5252"
+                    android:textSize="12sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnReconnect"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Reconnect"
+                    android:layout_marginStart="4dp"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:textColor="#03DAC5"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- 分隔線 -->
+    <View
+        android:id="@+id/divider"
+        android:layout_width="0dp"
+        android:layout_height="1dp"
+        android:background="#333333"
+        app:layout_constraintTop_toTopOf="@id/guideline50"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- ════════════════════════════════════════════
+         下半部：協定日誌
+         ════════════════════════════════════════════ -->
+    <LinearLayout
+        android:id="@+id/logPanel"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:orientation="vertical"
+        app:layout_constraintTop_toBottomOf="@id/divider"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- 日誌標題列 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="6dp"
+            android:background="#1A1A1A">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Protocol Log"
+                android:textColor="#B0B0B0"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnClearLog"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Clear"
+                android:textSize="11sp"
+                android:textColor="#888888"
+                style="@style/Widget.Material3.Button.TextButton" />
+        </LinearLayout>
+
+        <!-- 日誌列表 -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvLog"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="#0D0D0D"
+            android:clipToPadding="false"
+            android:paddingBottom="4dp" />
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
