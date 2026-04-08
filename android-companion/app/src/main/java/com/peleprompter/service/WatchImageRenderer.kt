@@ -61,6 +61,19 @@ class WatchImageRenderer(
     private var cachedTotalPages: Int = -1
     private var cachedContent: String? = null
 
+    /**
+     * 圓形平台的左右邊界像素數，防止文字貼邊難以閱讀。
+     * Chalk (180×180) → 20px，Gabbro (260×260) → 30px，其餘 → 0px。
+     */
+    private val horizontalPadPx: Int = when {
+        watchWidth == 180 && watchHeight == 180 -> 20
+        watchWidth == 260 && watchHeight == 260 -> 30
+        else -> 0
+    }
+
+    /** StaticLayout 排版寬度 = 螢幕寬 - 左右邊界 */
+    private val layoutWidth: Int = watchWidth - horizontalPadPx * 2
+
     // 每行的 stride (位元組數)
     val rowStride: Int = (watchWidth + 7) / 8
 
@@ -126,8 +139,9 @@ class WatchImageRenderer(
         val textYOnCanvas = EXTRA_PADDING_PX - pageNum.toLong() * watchHeight
 
         // 繪製文字（StaticLayout 白色文字，canvas 裁切到頁面範圍）
+        // horizontalPadPx 在圓形平台上提供左右邊界，避免文字貼邊
         canvas.save()
-        canvas.translate(0f, textYOnCanvas.toFloat())
+        canvas.translate(horizontalPadPx.toFloat(), textYOnCanvas.toFloat())
         layout.draw(canvas)
         canvas.restore()
 
@@ -152,7 +166,7 @@ class WatchImageRenderer(
 
         val layout = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             StaticLayout.Builder
-                .obtain(content, 0, content.length, paint, watchWidth)
+                .obtain(content, 0, content.length, paint, layoutWidth)
                 .setAlignment(Layout.Alignment.ALIGN_NORMAL)
                 .setLineSpacing(0f, LINE_SPACING_MULT)
                 .setIncludePad(false)
@@ -160,7 +174,7 @@ class WatchImageRenderer(
         } else {
             @Suppress("DEPRECATION")
             StaticLayout(
-                content, paint, watchWidth,
+                content, paint, layoutWidth,
                 Layout.Alignment.ALIGN_NORMAL,
                 LINE_SPACING_MULT, 0f, false
             )
