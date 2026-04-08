@@ -378,9 +378,4 @@ class PebbleCommManager(
     }
 
     fun isWatchConnected(): Boolean = PebbleKit.isWatchConnected(context)
-
-    // 保持 API 相容（MainViewModel 可能仍呼叫此方法）
-    fun sendTextChunk(offset: Int) {
-        Log.d(TAG, "sendTextChunk 已棄用（圖片模式），忽略 offset=$offset")
-    }
 }

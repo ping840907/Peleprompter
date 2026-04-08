@@ -11,11 +11,8 @@
 // 通訊協定鍵值 (與 Android 端一致)
 // ============================================================
 #define KEY_COMMAND        0   // (Int) 指令類型
-#define KEY_TEXT_OFFSET    1   // (Int) 字元偏移量 (保留相容)
-#define KEY_TEXT_CHUNK     2   // (String) 文字內容 (保留相容)
 #define KEY_SCROLL_SPEED   3   // (Int) 捲動速度 1-6
 #define KEY_TEXT_SIZE      4   // (Int) 文字大小 0=小, 1=中, 2=大
-// 圖片模式新增鍵值
 #define KEY_PAGE_NUM       5   // (Int) 頁碼 (0-indexed)
 #define KEY_CHUNK_INDEX    6   // (Int) 此頁圖片資料的區塊索引
 #define KEY_TOTAL_CHUNKS   7   // (Int) 此頁共幾個區塊
@@ -27,12 +24,11 @@
 // ============================================================
 // 指令類型
 // ============================================================
-#define CMD_REQUEST_TEXT    0  // 手錶向手機請求初始化 (含螢幕尺寸)
-#define CMD_SEND_TEXT       1  // 保留相容
-#define CMD_SYNC_SETTINGS   2  // 同步設定 (速度/字型大小)
-#define CMD_INIT_IMAGES     3  // 手機→手錶：初始化圖片模式 (總頁數+尺寸)
-#define CMD_REQUEST_PAGE    4  // 手錶→手機：請求第 N 頁圖片
-#define CMD_SEND_IMAGE_CHUNK 5 // 手機→手錶：傳送圖片資料區塊
+#define CMD_REQUEST_TEXT     0  // 手錶→手機：初始化請求 (含螢幕尺寸與文字大小)
+#define CMD_SYNC_SETTINGS    2  // 雙向：同步設定 (速度/字型大小)
+#define CMD_INIT_IMAGES      3  // 手機→手錶：初始化圖片模式 (總頁數+尺寸)
+#define CMD_REQUEST_PAGE     4  // 手錶→手機：請求第 N 頁圖片
+#define CMD_SEND_IMAGE_CHUNK 5  // 手機→手錶：傳送圖片資料區塊
 
 // ============================================================
 // 文字大小列舉

@@ -12,7 +12,6 @@ import android.text.TextPaint
 import android.util.Log
 import com.peleprompter.model.TextDocument
 import com.peleprompter.util.PebbleProtocol
-import kotlin.math.ceil
 
 /**
  * WatchImageRenderer

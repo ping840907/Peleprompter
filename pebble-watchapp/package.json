@@ -26,10 +26,15 @@
     },
     "messageKeys": {
       "KEY_COMMAND": 0,
-      "KEY_TEXT_OFFSET": 1,
-      "KEY_TEXT_CHUNK": 2,
       "KEY_SCROLL_SPEED": 3,
-      "KEY_TEXT_SIZE": 4
+      "KEY_TEXT_SIZE": 4,
+      "KEY_PAGE_NUM": 5,
+      "KEY_CHUNK_INDEX": 6,
+      "KEY_TOTAL_CHUNKS": 7,
+      "KEY_IMAGE_DATA": 8,
+      "KEY_TOTAL_PAGES": 9,
+      "KEY_WATCH_WIDTH": 10,
+      "KEY_WATCH_HEIGHT": 11
     },
     "resources": {
       "media": []
