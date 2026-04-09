@@ -16,6 +16,11 @@
 
 'use strict';
 
+// CloudPebble 模擬器偵測（platform === 'pypkjs' 表示在 CloudPebble 中執行）
+var EMULATOR = (typeof Pebble === 'undefined') || (Pebble.platform === 'pypkjs');
+// 代理頁面負責在 CloudPebble 中開啟 config 頁面（需啟用 GitHub Pages）
+var PROXY_URL = 'https://ping840907.github.io/peleprompter/config-proxy.html#';
+
 // ══════════════════════════════════════════════════════════════════
 // 協定常數（與 constants.h 完全一致）
 // ══════════════════════════════════════════════════════════════════
@@ -170,7 +175,16 @@ function sendPageInChunks(pageNum, data) {
 // 設定頁面
 // ══════════════════════════════════════════════════════════════════
 Pebble.addEventListener('showConfiguration', function() {
-  Pebble.openURL('data:text/html;charset=utf-8,' + encodeURIComponent(buildConfigHtml()));
+  var html = buildConfigHtml();
+  if (EMULATOR) {
+    // CloudPebble: 透過 GitHub Pages 代理頁面開啟
+    // $$RETURN_TO$$ 由代理替換成 CloudPebble 注入的 return_to URL
+    Pebble.openURL(PROXY_URL + encodeURIComponent(html));
+  } else {
+    // 實機：將 $$RETURN_TO$$ 替換為 pebblejs://close# 後以 data URI 開啟
+    var deviceHtml = html.split('$$RETURN_TO$$').join('pebblejs://close#');
+    Pebble.openURL('data:text/html;charset=utf-8,' + encodeURIComponent(deviceHtml));
+  }
 });
 
 Pebble.addEventListener('webviewclosed', function(e) {
@@ -439,11 +453,15 @@ function buildConfigHtml() {
     '}',
 
     // Send result back to PebbleKit JS
+    // $$RETURN_TO$$ is replaced at runtime:
+    //   real device  → "pebblejs://close#"  (via data URI in showConfiguration)
+    //   CloudPebble  → injected return URL   (via config-proxy.html)
+    'var RETURN_TO="$$RETURN_TO$$";',
     'function finish(pagesOut,n) {',
     '  setStatus("Done! "+n+(n>1?" pages":" page")+" rendered. Sending to watch...","ok");',
     '  var result={pages:pagesOut,totalPages:n,watchWidth:WW,watchHeight:WH,textSize:SZ};',
     '  try {',
-    '    document.location="pebblejs://close#"+encodeURIComponent(JSON.stringify(result));',
+    '    document.location=RETURN_TO+encodeURIComponent(JSON.stringify(result));',
     '  } catch(e) {',
     '    setStatus("Error: "+e.message,"error");',
     '    document.getElementById("btnRender").disabled=false;',

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Peleprompter Config Proxy</title></head>
+<body>
+<script>
+(function () {
+  'use strict';
+  // CloudPebble injects ?return_to=<url> when opening this proxy page.
+  // We decode the config HTML from the URL hash, replace the $$RETURN_TO$$
+  // placeholder with the real return URL, then open the result as a Blob
+  // (avoids Chrome 60+ data: URI navigation block).
+  var hash = window.location.hash.slice(1);
+  if (!hash) {
+    document.body.textContent = 'Error: no config data in URL hash.';
+    return;
+  }
+
+  var html;
+  try {
+    html = decodeURIComponent(hash);
+  } catch (e) {
+    document.body.textContent = 'Error: failed to decode config data.';
+    return;
+  }
+
+  var m = window.location.search.match(/[?&]return_to=([^&]*)/);
+  var returnTo = m ? decodeURIComponent(m[1]) : 'pebblejs://close#';
+  html = html.split('$$RETURN_TO$$').join(returnTo);
+
+  var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  window.location.replace(URL.createObjectURL(blob));
+}());
+</script>
+</body>
+</html>
