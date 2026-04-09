@@ -23,6 +23,9 @@ import java.util.UUID
  */
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
+    /** 稿件來源類型 */
+    enum class SourceType { NONE, PASTE, FILE }
+
     private val app = application as PeleprompterApp
     private val prefs = app.prefsManager
 
@@ -47,6 +50,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // 書籤更新
     private val _bookmarkOffset = MutableLiveData<Int>()
     val bookmarkOffset: LiveData<Int> = _bookmarkOffset
+
+    // 稿件來源類型
+    private val _sourceType = MutableLiveData<SourceType>(SourceType.NONE)
+    val sourceType: LiveData<SourceType> = _sourceType
 
     // 狀態訊息
     private val _statusMessage = MutableLiveData<String>()
@@ -90,6 +97,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             content = text,
             sourcePath = savedUri
         )
+        _sourceType.value = SourceType.PASTE
         setDocument(doc)
 
         // 儲存匯入歷史
@@ -140,6 +148,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 content = text,
                 sourcePath = uri.toString()
             )
+            _sourceType.value = SourceType.FILE
             setDocument(doc)
 
             // 儲存匯入歷史
@@ -195,6 +204,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 bookmarkOffset = prefs.getBookmark(entry.id),
                 sourcePath = entry.sourcePath
             )
+            // file:// 為內部儲存的貼上文字；content:// 為外部 .txt 匯入
+            _sourceType.value = if (uri.scheme == "file") SourceType.PASTE else SourceType.FILE
             setDocument(doc)
 
         } catch (e: Exception) {
@@ -205,7 +216,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun setDocument(doc: TextDocument) {
         _currentDocument.value = doc
         commManager.setCurrentDocument(doc)
+        getApplication<PeleprompterApp>().currentDocument = doc
         _statusMessage.value = "Loaded: ${doc.title} (${doc.totalLength} chars)"
+    }
+
+    /** 清除目前載入的稿件 */
+    fun clearCurrentDocument() {
+        _currentDocument.value = null
+        _sourceType.value = SourceType.NONE
+        _statusMessage.value = "Script cleared"
     }
 
     // ================================================================

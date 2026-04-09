@@ -35,7 +35,16 @@
             android:text="Disconnected"
             android:textColor="#FF5252"
             android:textSize="12sp"
-            android:drawablePadding="4dp" />
+            android:layout_marginEnd="8dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnOpenEmulator"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Emulator"
+            android:textSize="11sp"
+            android:textColor="#BB86FC"
+            style="@style/Widget.Material3.Button.TextButton" />
     </LinearLayout>
 
     <ScrollView
@@ -52,7 +61,7 @@
             android:orientation="vertical"
             android:padding="16dp">
 
-            <!-- 文字輸入區 -->
+            <!-- ① 稿件來源卡片 -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -71,60 +80,123 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Text Content"
+                        android:text="Script"
                         android:textColor="#B0B0B0"
                         android:textSize="14sp"
-                        android:layout_marginBottom="8dp" />
+                        android:layout_marginBottom="10dp" />
 
+                    <!-- 來源狀態列（常顯示） -->
+                    <LinearLayout
+                        android:id="@+id/layoutSourceBadge"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:background="@drawable/source_badge_empty"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="4dp"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="8dp"
+                        android:layout_marginBottom="10dp">
+
+                        <TextView
+                            android:id="@+id/tvSourceIcon"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textSize="20sp"
+                            android:layout_marginEnd="10dp" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/tvSourceName"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="No script loaded"
+                                android:textColor="#555555"
+                                android:textSize="13sp"
+                                android:textStyle="italic" />
+
+                            <TextView
+                                android:id="@+id/tvSourceDetail"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:visibility="gone"
+                                android:textColor="#546E7A"
+                                android:textSize="11sp"
+                                android:layout_marginTop="1dp" />
+                        </LinearLayout>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnClearScript"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="✕"
+                            android:visibility="gone"
+                            android:textColor="#666666"
+                            android:minWidth="0dp"
+                            android:paddingStart="8dp"
+                            android:paddingEnd="8dp"
+                            style="@style/Widget.Material3.Button.TextButton" />
+                    </LinearLayout>
+
+                    <!-- 貼上文字區 -->
                     <EditText
                         android:id="@+id/etTextContent"
                         android:layout_width="match_parent"
-                        android:layout_height="150dp"
+                        android:layout_height="140dp"
                         android:gravity="top|start"
-                        android:hint="Paste your text here..."
+                        android:hint="Paste script here..."
                         android:textColor="#FFFFFF"
-                        android:textColorHint="#666666"
+                        android:textColorHint="#555555"
                         android:background="@drawable/edit_text_bg"
                         android:padding="12dp"
                         android:textSize="14sp"
                         android:inputType="textMultiLine" />
 
+                    <!-- 操作按鈕列 -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
-                        android:layout_marginTop="8dp">
+                        android:layout_marginTop="10dp">
 
+                        <!-- 匯入檔案（主要替代方式） -->
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnImportFile"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Import .txt"
+                            android:text="Import .txt File"
                             android:layout_marginEnd="4dp"
-                            style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:textColor="#BB86FC" />
+                            android:textColor="#BB86FC"
+                            style="@style/Widget.Material3.Button.OutlinedButton" />
 
+                        <!-- 使用貼上的文字（僅當 EditText 有內容時啟用） -->
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnLoadText"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Load Text"
+                            android:text="Use Pasted Text"
                             android:layout_marginStart="4dp"
+                            android:enabled="false"
                             app:backgroundTint="#BB86FC" />
                     </LinearLayout>
 
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- 文件資訊與推送 -->
+            <!-- ② 傳送到手錶卡片（常顯示，無稿件時停用） -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/cardDocInfo"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
-                android:visibility="gone"
                 app:cardBackgroundColor="#1E1E1E"
                 app:cardCornerRadius="12dp"
                 app:strokeColor="#333333"
@@ -137,22 +209,31 @@
                     android:padding="16dp">
 
                     <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Send to Watch"
+                        android:textColor="#B0B0B0"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="8dp" />
+
+                    <!-- 目前載入的稿件資訊（來源 + 字數） -->
+                    <TextView
                         android:id="@+id/tvDocTitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Document Title"
-                        android:textColor="#FFFFFF"
-                        android:textSize="16sp"
-                        android:textStyle="bold" />
+                        android:text="No script loaded — select one above"
+                        android:textColor="#555555"
+                        android:textSize="14sp"
+                        android:textStyle="italic" />
 
                     <TextView
                         android:id="@+id/tvDocInfo"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="0 characters"
+                        android:visibility="gone"
                         android:textColor="#888888"
                         android:textSize="12sp"
-                        android:layout_marginTop="4dp" />
+                        android:layout_marginTop="2dp" />
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -167,6 +248,7 @@
                             android:layout_weight="1"
                             android:text="From Beginning"
                             android:layout_marginEnd="4dp"
+                            android:enabled="false"
                             app:backgroundTint="#03DAC5"
                             android:textColor="#000000" />
 
@@ -177,8 +259,9 @@
                             android:layout_weight="1"
                             android:text="Resume"
                             android:layout_marginStart="4dp"
-                            style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:textColor="#03DAC5" />
+                            android:enabled="false"
+                            android:textColor="#03DAC5"
+                            style="@style/Widget.Material3.Button.OutlinedButton" />
                     </LinearLayout>
 
                 </LinearLayout>
