@@ -129,13 +129,13 @@ Five levels are supported. Levels 0 and 1 use a light typeface for thinner strok
 
 ### Watch Controls
 
-| Button | Short Press | Long Press |
-|--------|------------|------------|
-| UP | Scroll up 60 px | Scroll up 120 px |
-| DOWN | Scroll down 60 px | Scroll down 120 px |
+| Button | Tap | Hold |
+|--------|-----|------|
+| UP | Scroll up 60 px | Continuous scroll up (60 px every 100 ms) |
+| DOWN | Scroll down 60 px | Continuous scroll down (60 px every 100 ms) |
 | SELECT | Play / Pause auto-scroll | Open Settings menu |
 
-Manual scrolling pauses auto-scroll for 2 seconds, then resumes automatically.
+Scrolling **up** pauses auto-scroll for 2 seconds, then resumes automatically. Scrolling **down** does not interrupt auto-scroll.
 
 ### In-Watch Settings Menu
 
