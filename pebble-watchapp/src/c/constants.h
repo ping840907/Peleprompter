@@ -86,5 +86,6 @@ extern const uint16_t SCROLL_INTERVALS_MS[7];
 // ============================================================
 // 持久化儲存鍵
 // ============================================================
-#define PERSIST_KEY_SCROLL_SPEED  100
-#define PERSIST_KEY_TEXT_SIZE     101
+#define PERSIST_KEY_SCROLL_SPEED    100
+#define PERSIST_KEY_TEXT_SIZE       101
+#define PERSIST_KEY_SHOW_STATUS_BAR 102

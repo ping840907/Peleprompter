@@ -37,9 +37,10 @@ const uint16_t SCROLL_INTERVALS_MS[7] = {
 // ============================================================
 
 // UI 元件
-static Window    *s_main_window  = NULL;
-static Layer     *s_canvas_layer = NULL;
-static TextLayer *s_status_layer = NULL;
+static Window         *s_main_window        = NULL;
+static Layer          *s_canvas_layer       = NULL;
+static TextLayer      *s_status_layer       = NULL;
+static StatusBarLayer *s_pebble_status_bar  = NULL;
 
 // 圖片管理員
 static ImageManager s_img_mgr;
@@ -58,8 +59,9 @@ static AppTimer *s_manual_pause_timer = NULL;
 static bool     s_manual_pause_active = false;
 
 // 設定
-static int32_t       s_scroll_speed = SCROLL_SPEED_DEFAULT;
-static TextSizeLevel s_text_size    = TEXT_SIZE_MEDIUM;
+static int32_t       s_scroll_speed    = SCROLL_SPEED_DEFAULT;
+static TextSizeLevel s_text_size       = TEXT_SIZE_MEDIUM;
+static bool          s_show_status_bar = false;
 
 // 連線狀態
 static bool s_bt_connected           = true;
@@ -388,10 +390,10 @@ static void select_short_click(ClickRecognizerRef recognizer, void *context) {
     }
 }
 
-static void on_settings_changed(int32_t speed, TextSizeLevel size);
+static void on_settings_changed(int32_t speed, TextSizeLevel size, bool show_status_bar);
 
 static void select_long_click(ClickRecognizerRef recognizer, void *context) {
-    settings_window_push(s_scroll_speed, s_text_size, on_settings_changed);
+    settings_window_push(s_scroll_speed, s_text_size, s_show_status_bar, on_settings_changed);
 }
 
 static void click_config_provider(void *context) {
@@ -494,22 +496,29 @@ static void on_settings_synced(int32_t scroll_speed, int32_t text_size) {
 }
 
 /** 設定視窗回呼（在手錶上更改設定） */
-static void on_settings_changed(int32_t speed, TextSizeLevel size) {
-    bool needs_reinit = (size != s_text_size);
-    s_scroll_speed = speed;
-    s_text_size    = size;
+static void on_settings_changed(int32_t speed, TextSizeLevel size, bool show_status_bar) {
+    bool needs_reinit = (size != s_text_size) || (show_status_bar != s_show_status_bar);
 
-    persist_write_int(PERSIST_KEY_SCROLL_SPEED, s_scroll_speed);
-    persist_write_int(PERSIST_KEY_TEXT_SIZE, (int32_t)s_text_size);
+    s_scroll_speed    = speed;
+    s_text_size       = size;
+    s_show_status_bar = show_status_bar;
+
+    persist_write_int(PERSIST_KEY_SCROLL_SPEED,    s_scroll_speed);
+    persist_write_int(PERSIST_KEY_TEXT_SIZE,        (int32_t)s_text_size);
+    persist_write_int(PERSIST_KEY_SHOW_STATUS_BAR,  (int32_t)s_show_status_bar);
 
     messaging_send_settings(s_scroll_speed, (int32_t)s_text_size);
+
+    // 套用頂部時間欄變更（調整 canvas / StatusBarLayer）
+    apply_status_bar();
 
     if (needs_reinit && s_canvas_layer) {
         s_images_initialized = false;
         image_manager_deinit(&s_img_mgr);
 
-        GRect bounds = layer_get_bounds(s_canvas_layer);
-        messaging_request_init(bounds.size.w, bounds.size.h, (int32_t)s_text_size);
+        // 使用更新後的 canvas 尺寸（已反映時間欄高度）
+        GRect canvas_bounds = layer_get_bounds(s_canvas_layer);
+        messaging_request_init(canvas_bounds.size.w, canvas_bounds.size.h, (int32_t)s_text_size);
 
         text_layer_set_text(s_status_layer, "Reloading...");
         layer_set_hidden(text_layer_get_layer(s_status_layer), false);
@@ -533,6 +542,56 @@ static void on_connection_changed(bool connected) {
 }
 
 // ============================================================
+// 狀態欄輔助
+// ============================================================
+
+/**
+ * 套用目前的 s_show_status_bar 設定：
+ * 建立/銷毀 StatusBarLayer，並相應地調整 canvas 與狀態文字的框架。
+ * 可在視窗載入後的任何時機呼叫。
+ */
+static void apply_status_bar(void) {
+    if (!s_main_window) return;
+
+    Layer *window_layer = window_get_root_layer(s_main_window);
+    GRect  win_bounds   = layer_get_bounds(window_layer);
+    GRect  canvas_rect  = win_bounds;
+
+    if (s_show_status_bar) {
+        canvas_rect.origin.y  = STATUS_BAR_LAYER_HEIGHT;
+        canvas_rect.size.h   -= STATUS_BAR_LAYER_HEIGHT;
+
+        if (!s_pebble_status_bar) {
+            s_pebble_status_bar = status_bar_layer_create();
+            layer_add_child(window_layer,
+                            status_bar_layer_get_layer(s_pebble_status_bar));
+        }
+    } else {
+        if (s_pebble_status_bar) {
+            layer_remove_from_parent(
+                status_bar_layer_get_layer(s_pebble_status_bar));
+            status_bar_layer_destroy(s_pebble_status_bar);
+            s_pebble_status_bar = NULL;
+        }
+    }
+
+    if (s_canvas_layer) {
+        layer_set_frame(s_canvas_layer, canvas_rect);
+    }
+
+    // 將「Waiting…」文字層置中於 canvas 區域（以視窗座標表示）
+    if (s_status_layer) {
+        GRect text_rect = GRect(
+            canvas_rect.origin.x,
+            canvas_rect.origin.y + canvas_rect.size.h / 2 - 15,
+            canvas_rect.size.w,
+            30
+        );
+        layer_set_frame(text_layer_get_layer(s_status_layer), text_rect);
+    }
+}
+
+// ============================================================
 // 主視窗生命週期
 // ============================================================
 
@@ -540,12 +599,12 @@ static void main_window_load(Window *window) {
     Layer *window_layer = window_get_root_layer(window);
     GRect bounds = layer_get_bounds(window_layer);
 
-    // 建立自訂繪製圖層（全螢幕）
+    // 建立自訂繪製圖層（初始全螢幕，apply_status_bar 會視需要縮減）
     s_canvas_layer = layer_create(bounds);
     layer_set_update_proc(s_canvas_layer, canvas_update_proc);
     layer_add_child(window_layer, s_canvas_layer);
 
-    // 建立狀態列（初始顯示 "Waiting for text..."）
+    // 建立狀態文字層（位置由 apply_status_bar 決定）
     s_status_layer = text_layer_create(
         GRect(0, bounds.size.h / 2 - 15, bounds.size.w, 30)
     );
@@ -558,12 +617,20 @@ static void main_window_load(Window *window) {
     layer_set_hidden(text_layer_get_layer(s_status_layer), false);
     layer_add_child(window_layer, text_layer_get_layer(s_status_layer));
 
-    // 向手機發送初始化請求，附上螢幕尺寸與文字大小
-    messaging_request_init(bounds.size.w, bounds.size.h, (int32_t)s_text_size);
+    // 套用頂部時間欄設定（建立 StatusBarLayer 並調整 canvas 框架）
+    apply_status_bar();
+
+    // 向手機發送初始化請求，使用 canvas 實際尺寸（已扣除時間欄高度）
+    GRect canvas_bounds = layer_get_bounds(s_canvas_layer);
+    messaging_request_init(canvas_bounds.size.w, canvas_bounds.size.h, (int32_t)s_text_size);
     s_waiting_for_page = false;
 }
 
 static void main_window_unload(Window *window) {
+    if (s_pebble_status_bar) {
+        status_bar_layer_destroy(s_pebble_status_bar);
+        s_pebble_status_bar = NULL;
+    }
     layer_destroy(s_canvas_layer);
     text_layer_destroy(s_status_layer);
     s_canvas_layer = NULL;
@@ -587,6 +654,9 @@ static void init(void) {
         if (size_val >= TEXT_SIZE_SMALL && size_val <= TEXT_SIZE_LARGE) {
             s_text_size = (TextSizeLevel)size_val;
         }
+    }
+    if (persist_exists(PERSIST_KEY_SHOW_STATUS_BAR)) {
+        s_show_status_bar = (bool)persist_read_int(PERSIST_KEY_SHOW_STATUS_BAR);
     }
 
     // 初始化圖片管理員

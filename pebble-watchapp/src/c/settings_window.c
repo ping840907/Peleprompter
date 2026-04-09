@@ -1,7 +1,7 @@
 /**
  * settings_window.c - 設定視窗實作
  *
- * 使用 MenuLayer 提供捲動速度和文字大小的調整介面。
+ * 使用 MenuLayer 提供捲動速度、文字大小與頂部時間欄的調整介面。
  */
 
 #include "settings_window.h"
@@ -9,19 +9,20 @@
 // ============================================================
 // 私有狀態
 // ============================================================
-static Window *s_settings_window = NULL;
-static MenuLayer *s_menu_layer = NULL;
+static Window    *s_settings_window  = NULL;
+static MenuLayer *s_menu_layer       = NULL;
 
-static int32_t s_current_speed;
-static TextSizeLevel s_current_size;
+static int32_t       s_current_speed      = SCROLL_SPEED_DEFAULT;
+static TextSizeLevel s_current_size       = TEXT_SIZE_MEDIUM;
+static bool          s_current_status_bar = false;
 static SettingsChangedCallback s_change_callback = NULL;
 
 // 選單區段
-#define SECTION_SPEED 0
-#define SECTION_SIZE  1
-#define NUM_SECTIONS  2
+#define SECTION_SPEED     0
+#define SECTION_SIZE      1
+#define SECTION_STATUSBAR 2
+#define NUM_SECTIONS      3
 
-// 文字大小名稱
 static const char *SIZE_NAMES[] = { "Small", "Medium", "Large" };
 
 // ============================================================
@@ -35,8 +36,9 @@ static uint16_t menu_get_num_sections(MenuLayer *menu_layer, void *data) {
 static uint16_t menu_get_num_rows(MenuLayer *menu_layer, uint16_t section_index,
                                   void *data) {
     switch (section_index) {
-        case SECTION_SPEED: return SCROLL_SPEED_MAX;  // 6 個速度等級
-        case SECTION_SIZE:  return 3;                  // 小/中/大
+        case SECTION_SPEED:     return SCROLL_SPEED_MAX;  // 6 個速度等級
+        case SECTION_SIZE:      return 3;                  // 小/中/大
+        case SECTION_STATUSBAR: return 1;                  // 開/關切換
         default: return 0;
     }
 }
@@ -48,30 +50,36 @@ static int16_t menu_get_header_height(MenuLayer *menu_layer, uint16_t section_in
 
 static void menu_draw_header(GContext *ctx, const Layer *cell_layer,
                              uint16_t section_index, void *data) {
-    const char *title = (section_index == SECTION_SPEED) ? "Scroll Speed" : "Text Size";
+    const char *title;
+    switch (section_index) {
+        case SECTION_SPEED:     title = "Scroll Speed"; break;
+        case SECTION_SIZE:      title = "Text Size";    break;
+        case SECTION_STATUSBAR: title = "Display";      break;
+        default:                title = "";              break;
+    }
 
     GRect bounds = layer_get_bounds(cell_layer);
-    
-    #if defined(PBL_COLOR)
+
+#if defined(PBL_COLOR)
     graphics_context_set_fill_color(ctx, GColorLightGray);
-    #else
+#else
     graphics_context_set_fill_color(ctx, GColorWhite);
-    #endif
-    
+#endif
+
     graphics_fill_rect(ctx, bounds, 0, GCornerNone);
     graphics_context_set_text_color(ctx, GColorBlack);
-    
-    // 強制設定寬度為螢幕寬度，忽略 MenuLayer 自帶的縮進，確保絕對置中
-    #if defined(PBL_ROUND)
-    int16_t screen_width = 180;
-    #else
-    int16_t screen_width = bounds.size.w > 0 ? bounds.size.w : 144;
-    #endif
-    
-    GRect text_bounds = GRect(0, bounds.origin.y - 2, screen_width, bounds.size.h + 4);
 
-    graphics_draw_text(ctx, title, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                       text_bounds, GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
+#if defined(PBL_ROUND)
+    int16_t screen_width = 180;
+#else
+    int16_t screen_width = bounds.size.w > 0 ? bounds.size.w : 144;
+#endif
+
+    GRect text_bounds = GRect(0, bounds.origin.y - 2, screen_width, bounds.size.h + 4);
+    graphics_draw_text(ctx, title,
+                       fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                       text_bounds, GTextOverflowModeWordWrap,
+                       GTextAlignmentCenter, NULL);
 }
 
 static void menu_draw_row(GContext *ctx, const Layer *cell_layer,
@@ -82,8 +90,6 @@ static void menu_draw_row(GContext *ctx, const Layer *cell_layer,
         case SECTION_SPEED: {
             int level = cell_index->row + 1;
             snprintf(buf, sizeof(buf), "Speed %d", level);
-
-            // 顯示目前選取的速度
             if (level == s_current_speed) {
                 menu_cell_basic_draw(ctx, cell_layer, buf, "Current", NULL);
             } else {
@@ -98,6 +104,12 @@ static void menu_draw_row(GContext *ctx, const Layer *cell_layer,
             } else {
                 menu_cell_basic_draw(ctx, cell_layer, name, NULL, NULL);
             }
+            break;
+        }
+        case SECTION_STATUSBAR: {
+            // 顯示目前狀態；點擊即切換
+            const char *state = s_current_status_bar ? "On" : "Off";
+            menu_cell_basic_draw(ctx, cell_layer, "Time Bar", state, NULL);
             break;
         }
     }
@@ -124,15 +136,18 @@ static void menu_select_click(MenuLayer *menu_layer, MenuIndex *cell_index,
             }
             break;
         }
+        case SECTION_STATUSBAR: {
+            // 切換顯示狀態
+            s_current_status_bar = !s_current_status_bar;
+            changed = true;
+            break;
+        }
     }
 
     if (changed) {
-        // 重繪選單以更新 "Current" 標記
         menu_layer_reload_data(s_menu_layer);
-
-        // 通知主程式設定已變更
         if (s_change_callback) {
-            s_change_callback(s_current_speed, s_current_size);
+            s_change_callback(s_current_speed, s_current_size, s_current_status_bar);
         }
     }
 }
@@ -148,34 +163,29 @@ static void settings_window_load(Window *window) {
     s_menu_layer = menu_layer_create(bounds);
     menu_layer_set_callbacks(s_menu_layer, NULL, (MenuLayerCallbacks){
         .get_num_sections = menu_get_num_sections,
-        .get_num_rows = menu_get_num_rows,
-        .get_header_height = menu_get_header_height,
-        .draw_header = menu_draw_header,
-        .draw_row = menu_draw_row,
-        .select_click = menu_select_click,
+        .get_num_rows     = menu_get_num_rows,
+        .get_header_height= menu_get_header_height,
+        .draw_header      = menu_draw_header,
+        .draw_row         = menu_draw_row,
+        .select_click     = menu_select_click,
     });
-
     menu_layer_set_click_config_onto_window(s_menu_layer, window);
 
-    #ifdef PBL_ROUND
+#ifdef PBL_ROUND
     menu_layer_set_center_focused(s_menu_layer, true);
-    #endif
+#endif
 
     layer_add_child(window_layer, menu_layer_get_layer(s_menu_layer));
 }
 
-// 延遲銷毀視窗的計時器回呼 (不可在 unload 中直接銷毀自身)
 static void deferred_window_destroy(void *data) {
     Window *window = (Window *)data;
-    if (window) {
-        window_destroy(window);
-    }
+    if (window) window_destroy(window);
 }
 
 static void settings_window_unload(Window *window) {
     menu_layer_destroy(s_menu_layer);
     s_menu_layer = NULL;
-    // 延遲銷毀視窗，避免在 unload 回呼中銷毀自身
     app_timer_register(0, deferred_window_destroy, s_settings_window);
     s_settings_window = NULL;
 }
@@ -185,16 +195,17 @@ static void settings_window_unload(Window *window) {
 // ============================================================
 
 void settings_window_push(int32_t speed, TextSizeLevel size,
+                          bool show_status_bar,
                           SettingsChangedCallback callback) {
-    s_current_speed = speed;
-    s_current_size = size;
-    s_change_callback = callback;
+    s_current_speed      = speed;
+    s_current_size       = size;
+    s_current_status_bar = show_status_bar;
+    s_change_callback    = callback;
 
     s_settings_window = window_create();
     window_set_window_handlers(s_settings_window, (WindowHandlers){
-        .load = settings_window_load,
+        .load   = settings_window_load,
         .unload = settings_window_unload,
     });
-
-    window_stack_push(s_settings_window, true /* animated */);
+    window_stack_push(s_settings_window, true);
 }

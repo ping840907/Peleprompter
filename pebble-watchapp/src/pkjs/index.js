@@ -13,9 +13,9 @@
  * pebblejs://close# 將結果傳回。不需要網路或外部伺服器。
  * Android companion app 為選配。
  */
- 
+
 'use strict';
- 
+
 // ══════════════════════════════════════════════════════════════════
 // 協定常數（與 constants.h 完全一致）
 // ══════════════════════════════════════════════════════════════════
@@ -29,16 +29,16 @@ var KEY_IMAGE_DATA       = 8;
 var KEY_TOTAL_PAGES      = 9;
 var KEY_WATCH_WIDTH      = 10;
 var KEY_WATCH_HEIGHT     = 11;
- 
+
 var CMD_REQUEST_TEXT     = 0;
 var CMD_SYNC_SETTINGS    = 2;
 var CMD_INIT_IMAGES      = 3;
 var CMD_REQUEST_PAGE     = 4;
 var CMD_SEND_IMAGE_CHUNK = 5;
- 
+
 // 每個區塊最多傳送位元組數（留出 AppMessage header 空間）
 var IMAGE_CHUNK_DATA_SIZE = 1800;
- 
+
 // ══════════════════════════════════════════════════════════════════
 // 狀態
 // ══════════════════════════════════════════════════════════════════
@@ -47,11 +47,11 @@ var totalPages  = 0;
 var watchWidth  = 144;
 var watchHeight = 168;
 var textSize    = 1;    // TEXT_SIZE_MEDIUM
- 
+
 // ACK 驅動發送佇列
 var messageQueue = [];
 var isSending    = false;
- 
+
 // ══════════════════════════════════════════════════════════════════
 // 訊息佇列（ACK 驅動，防止超出手錶 inbox）
 // ══════════════════════════════════════════════════════════════════
@@ -59,7 +59,7 @@ function enqueue(dict) {
   messageQueue.push(dict);
   processQueue();
 }
- 
+
 function processQueue() {
   if (isSending || messageQueue.length === 0) return;
   isSending = true;
@@ -74,19 +74,19 @@ function processQueue() {
     }
   );
 }
- 
+
 // ══════════════════════════════════════════════════════════════════
 // AppMessage 事件
 // ══════════════════════════════════════════════════════════════════
 Pebble.addEventListener('ready', function() {
   console.log('[pkjs] Ready. Pages loaded: ' + pages.length);
 });
- 
+
 Pebble.addEventListener('appmessage', function(e) {
   var dict = e.payload;
   var cmd  = dict[KEY_COMMAND];
   if (cmd === undefined || cmd === null) return;
- 
+
   switch (cmd) {
     case CMD_REQUEST_TEXT:   handleInitRequest(dict);    break;
     case CMD_REQUEST_PAGE:   handlePageRequest(dict);    break;
@@ -94,15 +94,15 @@ Pebble.addEventListener('appmessage', function(e) {
     default: console.log('[pkjs] Unknown command: ' + cmd);
   }
 });
- 
+
 function handleInitRequest(dict) {
   var reqW    = parseInt(dict[KEY_WATCH_WIDTH])  || 144;
   var reqH    = parseInt(dict[KEY_WATCH_HEIGHT]) || 168;
   var reqSize = (dict[KEY_TEXT_SIZE] != null) ? parseInt(dict[KEY_TEXT_SIZE]) : textSize;
- 
+
   console.log('[pkjs] Init request: ' + reqW + 'x' + reqH + ' textSize=' + reqSize +
               ' pages=' + pages.length);
- 
+
   if (pages.length === 0) {
     console.log('[pkjs] No pages — open settings to paste text.');
     return;
@@ -110,18 +110,18 @@ function handleInitRequest(dict) {
   if (reqSize !== textSize) {
     console.log('[pkjs] Text size mismatch (req=' + reqSize + ' rendered=' + textSize + ').');
   }
- 
+
   var reply = {};
   reply[KEY_COMMAND]     = CMD_INIT_IMAGES;
   reply[KEY_TOTAL_PAGES] = totalPages;
   reply[KEY_WATCH_WIDTH] = watchWidth;
   reply[KEY_WATCH_HEIGHT]= watchHeight;
   enqueue(reply);
- 
+
   console.log('[pkjs] Sent CMD_INIT_IMAGES: ' + totalPages + ' pages ' +
               watchWidth + 'x' + watchHeight);
 }
- 
+
 function handlePageRequest(dict) {
   var pageNum = parseInt(dict[KEY_PAGE_NUM]);
   if (isNaN(pageNum) || pageNum < 0 || pageNum >= totalPages) {
@@ -135,7 +135,7 @@ function handlePageRequest(dict) {
   }
   sendPageInChunks(pageNum, pageData);
 }
- 
+
 function handleSettingsSync(dict) {
   if (dict[KEY_TEXT_SIZE] != null) {
     var newSize = parseInt(dict[KEY_TEXT_SIZE]);
@@ -145,7 +145,7 @@ function handleSettingsSync(dict) {
     }
   }
 }
- 
+
 function sendPageInChunks(pageNum, data) {
   var totalChunks = Math.ceil(data.length / IMAGE_CHUNK_DATA_SIZE);
   for (var i = 0; i < totalChunks; i++) {
@@ -153,7 +153,7 @@ function sendPageInChunks(pageNum, data) {
     var end   = Math.min(start + IMAGE_CHUNK_DATA_SIZE, data.length);
     var chunk = [];
     for (var j = start; j < end; j++) chunk.push(data[j]);
- 
+
     var msg = {};
     msg[KEY_COMMAND]      = CMD_SEND_IMAGE_CHUNK;
     msg[KEY_PAGE_NUM]     = pageNum;
@@ -165,14 +165,14 @@ function sendPageInChunks(pageNum, data) {
   console.log('[pkjs] Queued ' + totalChunks + ' chunks for page ' + pageNum +
               ' (' + data.length + 'B)');
 }
- 
+
 // ══════════════════════════════════════════════════════════════════
 // 設定頁面
 // ══════════════════════════════════════════════════════════════════
 Pebble.addEventListener('showConfiguration', function() {
   Pebble.openURL('data:text/html;charset=utf-8,' + encodeURIComponent(buildConfigHtml()));
 });
- 
+
 Pebble.addEventListener('webviewclosed', function(e) {
   if (!e || !e.response || e.response === 'CANCELLED' || e.response === '') {
     console.log('[pkjs] Config closed without data');
@@ -184,16 +184,16 @@ Pebble.addEventListener('webviewclosed', function(e) {
       console.log('[pkjs] Config returned empty page set');
       return;
     }
- 
+
     pages       = result.pages.map(base64ToArray);
     totalPages  = result.totalPages  || pages.length;
     watchWidth  = result.watchWidth  || 144;
     watchHeight = result.watchHeight || 168;
     textSize    = result.textSize    != null ? result.textSize : 1;
- 
+
     console.log('[pkjs] Loaded ' + totalPages + ' pages (' +
                 watchWidth + 'x' + watchHeight + ' textSize=' + textSize + ')');
- 
+
     try {
       localStorage.setItem('pele_meta', JSON.stringify({
         totalPages: totalPages, watchWidth: watchWidth,
@@ -205,19 +205,19 @@ Pebble.addEventListener('webviewclosed', function(e) {
     } catch (lsErr) {
       console.log('[pkjs] localStorage save failed: ' + lsErr);
     }
- 
+
   } catch (ex) {
     console.log('[pkjs] Failed to parse config response: ' + ex.message);
   }
 });
- 
+
 function base64ToArray(b64) {
   var binary = atob(b64);
   var arr = new Array(binary.length);
   for (var i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
   return arr;
 }
- 
+
 // ── 從 localStorage 恢復上次的頁面資料 ──────────────────────────
 (function restoreFromStorage() {
   try {
@@ -226,7 +226,7 @@ function base64ToArray(b64) {
     var meta = JSON.parse(metaStr);
     var n = meta.totalPages || 0;
     if (n === 0) return;
- 
+
     var restored = [];
     for (var i = 0; i < n; i++) {
       var b64 = localStorage.getItem('pele_page_' + i);
@@ -245,7 +245,7 @@ function base64ToArray(b64) {
     console.log('[pkjs] localStorage restore failed: ' + e);
   }
 }());
- 
+
 // ══════════════════════════════════════════════════════════════════
 // Config 頁面 HTML（完整嵌入，以 data URI 傳入 Pebble.openURL）
 // ══════════════════════════════════════════════════════════════════
@@ -287,11 +287,11 @@ function buildConfigHtml() {
     '</head>',
     '<body>',
     '<h2>&#x1F4FA; Peleprompter</h2>',
- 
+
     // ── Text input ──────────────────────────────────────────────
     '<label class="label">Text Content</label>',
     '<textarea id="txt" placeholder="Paste your script here..." oninput="onTextChange()"></textarea>',
- 
+
     // ── Platform selector ────────────────────────────────────────
     '<label class="label">Platform</label>',
     '<div class="btn-row" id="platRow">',
@@ -300,7 +300,7 @@ function buildConfigHtml() {
     '  <button class="seg-btn"        data-w="200" data-h="228" data-hpad="2"  onclick="setPlatform(this)">Emery<br>200&#xD7;228</button>',
     '  <button class="seg-btn"        data-w="260" data-h="260" data-hpad="30" onclick="setPlatform(this)">Gabbro<br>260&#xD7;260</button>',
     '</div>',
- 
+
     // ── Text size selector ───────────────────────────────────────
     '<label class="label">Text Size</label>',
     '<div class="btn-row" id="sizeRow">',
@@ -308,26 +308,26 @@ function buildConfigHtml() {
     '  <button class="seg-btn active" data-sz="1" onclick="setSize(this)">Medium</button>',
     '  <button class="seg-btn"        data-sz="2" onclick="setSize(this)">Large</button>',
     '</div>',
- 
+
     // ── Estimate info ────────────────────────────────────────────
     '<div class="info-box" id="infoBox">',
     '  Estimated <span id="estPages">?</span> pages &nbsp;&bull;&nbsp; <span id="estKb">?</span> KB',
     '</div>',
- 
+
     // ── Render button + progress ─────────────────────────────────
     '<button id="btnRender" onclick="doRender()">Render &amp; Connect to Watch</button>',
     '<div id="progressWrap"><progress id="prog" max="100" value="0"></progress></div>',
     '<div id="status">Enter your script above and tap Render.</div>',
     '<canvas id="c"></canvas>',
- 
+
     // ── Script ───────────────────────────────────────────────────
     '<script>',
     '"use strict";',
- 
+
     // State
     'var WW=144, WH=168, SZ=1, HPAD=2;',
     'var PADDING=50, FONT_PX=[14,18,22], MAX_PAGES=60;',
- 
+
     // UI helpers
     'function setPlatform(btn) {',
     '  document.querySelectorAll("#platRow .seg-btn").forEach(function(b){b.className="seg-btn";});',
@@ -345,7 +345,7 @@ function buildConfigHtml() {
     '}',
     'function setStatus(msg,cls){var el=document.getElementById("status");el.textContent=msg;el.className=cls||"";}',
     'function onTextChange(){updateEstimate();}',
- 
+
     // Live estimate
     'function updateEstimate() {',
     '  var text=document.getElementById("txt").value.trim();',
@@ -361,7 +361,7 @@ function buildConfigHtml() {
     '  document.getElementById("estKb").textContent=kb;',
     '  document.getElementById("infoBox").style.display="block";',
     '}',
- 
+
     // Text wrapping
     'function wrapText(ctx,text,maxW) {',
     '  var lines=[],paras=text.split("\\n");',
@@ -378,7 +378,7 @@ function buildConfigHtml() {
     '  }',
     '  return lines;',
     '}',
- 
+
     // 1-bit encoder (matches WatchImageRenderer.kt: BT.601, MSB-first, threshold 64)
     'function encode1Bit(imageData,w,h) {',
     '  var stride=Math.ceil(w/8), result=new Uint8Array(stride*h), d=imageData.data;',
@@ -388,7 +388,7 @@ function buildConfigHtml() {
     '  }',
     '  return result;',
     '}',
- 
+
     // Base64 encode (chunk to avoid call stack overflow on large arrays)
     'function toBase64(bytes) {',
     '  var s="", CHUNK=8192;',
@@ -396,7 +396,7 @@ function buildConfigHtml() {
     '    s+=String.fromCharCode.apply(null,bytes.subarray(i,i+CHUNK));',
     '  return btoa(s);',
     '}',
- 
+
     // Render all pages async (one page per setTimeout tick)
     'function doRender() {',
     '  var text=document.getElementById("txt").value.trim();',
@@ -437,7 +437,7 @@ function buildConfigHtml() {
     '  }',
     '  renderNext();',
     '}',
- 
+
     // Send result back to PebbleKit JS
     'function finish(pagesOut,n) {',
     '  setStatus("Done! "+n+(n>1?" pages":" page")+" rendered. Sending to watch...","ok");',
@@ -449,11 +449,11 @@ function buildConfigHtml() {
     '    document.getElementById("btnRender").disabled=false;',
     '  }',
     '}',
- 
+
     '<\/script>',
     '</body>',
     '</html>'
   ];
- 
+
   return lines.join('\n');
 }
