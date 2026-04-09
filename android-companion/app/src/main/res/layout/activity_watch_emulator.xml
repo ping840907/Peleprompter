@@ -73,6 +73,16 @@
                 app:selectionRequired="true">
 
                 <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnEmuSizeTiny"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Tiny"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:textColor="#FFFFFF"
+                    android:textSize="10sp" />
+
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnEmuSizeSmall"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
@@ -80,7 +90,7 @@
                     android:text="Small"
                     style="@style/Widget.Material3.Button.OutlinedButton"
                     android:textColor="#FFFFFF"
-                    android:textSize="12sp" />
+                    android:textSize="10sp" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnEmuSizeMedium"
@@ -90,7 +100,7 @@
                     android:text="Medium"
                     style="@style/Widget.Material3.Button.OutlinedButton"
                     android:textColor="#FFFFFF"
-                    android:textSize="12sp" />
+                    android:textSize="10sp" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnEmuSizeLarge"
@@ -100,7 +110,17 @@
                     android:text="Large"
                     style="@style/Widget.Material3.Button.OutlinedButton"
                     android:textColor="#FFFFFF"
-                    android:textSize="12sp" />
+                    android:textSize="10sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnEmuSizeXLarge"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="XLarge"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:textColor="#FFFFFF"
+                    android:textSize="10sp" />
             </com.google.android.material.button.MaterialButtonToggleGroup>
 
             <!-- 手錶螢幕 + 捲動按鍵（水平排列） -->

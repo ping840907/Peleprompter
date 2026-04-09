@@ -34,7 +34,7 @@ class WatchEmulatorActivity : AppCompatActivity() {
     private var simulator: WatchSimulator? = null
 
     private var selectedPlatform  = WatchPlatform.BASALT
-    private var selectedTextSize  = PebbleProtocol.TEXT_SIZE_LARGE   // 對應原 Medium
+    private var selectedTextSize  = PebbleProtocol.TEXT_SIZE_MEDIUM
 
     // ================================================================
     // 生命週期
@@ -110,9 +110,12 @@ class WatchEmulatorActivity : AppCompatActivity() {
         binding.toggleTextSize.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (!isChecked) return@addOnButtonCheckedListener
             val newSize = when (checkedId) {
-                R.id.btnEmuSizeSmall -> PebbleProtocol.TEXT_SIZE_MEDIUM  // 對應原 Small
-                R.id.btnEmuSizeLarge -> PebbleProtocol.TEXT_SIZE_XLARGE  // 對應原 Large
-                else                  -> PebbleProtocol.TEXT_SIZE_LARGE   // 對應原 Medium
+                R.id.btnEmuSizeTiny   -> PebbleProtocol.TEXT_SIZE_TINY
+                R.id.btnEmuSizeSmall  -> PebbleProtocol.TEXT_SIZE_SMALL
+                R.id.btnEmuSizeMedium -> PebbleProtocol.TEXT_SIZE_MEDIUM
+                R.id.btnEmuSizeLarge  -> PebbleProtocol.TEXT_SIZE_LARGE
+                R.id.btnEmuSizeXLarge -> PebbleProtocol.TEXT_SIZE_XLARGE
+                else -> return@addOnButtonCheckedListener
             }
             if (newSize != selectedTextSize) {
                 selectedTextSize = newSize
