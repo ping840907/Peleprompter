@@ -391,6 +391,7 @@ static void select_short_click(ClickRecognizerRef recognizer, void *context) {
 }
 
 static void on_settings_changed(int32_t speed, TextSizeLevel size, bool show_status_bar);
+static void apply_status_bar(void);
 
 static void select_long_click(ClickRecognizerRef recognizer, void *context) {
     settings_window_push(s_scroll_speed, s_text_size, s_show_status_bar, on_settings_changed);
