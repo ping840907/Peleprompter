@@ -43,14 +43,25 @@ class WatchImageRenderer(
 
         /**
          * 文字大小對照（像素）
-         * 對應手錶端 Gothic 18/24/28 的視覺大小，
-         * 使用 Android 無抗鋸齒 sans-serif 在 1-bit 環境下呈現清晰效果。
+         * Tiny/Small 為新增的較小等級；Medium/Large/XLarge 維持原有視覺大小。
          */
         private fun fontSizePx(sizeLevel: Int): Float = when (sizeLevel) {
-            PebbleProtocol.TEXT_SIZE_SMALL  -> 16f
-            PebbleProtocol.TEXT_SIZE_LARGE  -> 28f
-            else                             -> 22f   // MEDIUM
+            PebbleProtocol.TEXT_SIZE_TINY   -> 10f
+            PebbleProtocol.TEXT_SIZE_SMALL  -> 13f
+            PebbleProtocol.TEXT_SIZE_MEDIUM -> 16f
+            PebbleProtocol.TEXT_SIZE_LARGE  -> 22f
+            else                             -> 28f   // XLARGE
         }
+
+        /**
+         * 字型選擇：Tiny/Small 使用 sans-serif-light 以呈現較細的筆畫，
+         * 在 1-bit 二值化後仍保持可讀性。其餘等級使用 MONOSPACE。
+         */
+        private fun typefaceFor(sizeLevel: Int): Typeface =
+            if (sizeLevel <= PebbleProtocol.TEXT_SIZE_SMALL)
+                Typeface.create("sans-serif-light", Typeface.NORMAL)
+            else
+                Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL)
 
         /** 行距倍數：略寬鬆，提升提詞機閱讀舒適度 */
         private const val LINE_SPACING_MULT = 1.15f
@@ -190,7 +201,7 @@ class WatchImageRenderer(
         return TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color     = Color.WHITE
             textSize  = fontSizePx(textSizeLevel)
-            typeface  = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL)
+            typeface  = typefaceFor(textSizeLevel)
             // 關閉子像素渲染，避免彩色邊緣在二值化後產生雜訊
             isSubpixelText = false
         }

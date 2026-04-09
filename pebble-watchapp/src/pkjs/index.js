@@ -318,9 +318,11 @@ function buildConfigHtml() {
     // ── Text size selector ───────────────────────────────────────
     '<label class="label">Text Size</label>',
     '<div class="btn-row" id="sizeRow">',
-    '  <button class="seg-btn"        data-sz="0" onclick="setSize(this)">Small</button>',
-    '  <button class="seg-btn active" data-sz="1" onclick="setSize(this)">Medium</button>',
-    '  <button class="seg-btn"        data-sz="2" onclick="setSize(this)">Large</button>',
+    '  <button class="seg-btn"        data-sz="0" onclick="setSize(this)">Tiny</button>',
+    '  <button class="seg-btn"        data-sz="1" onclick="setSize(this)">Small</button>',
+    '  <button class="seg-btn active" data-sz="2" onclick="setSize(this)">Medium</button>',
+    '  <button class="seg-btn"        data-sz="3" onclick="setSize(this)">Large</button>',
+    '  <button class="seg-btn"        data-sz="4" onclick="setSize(this)">XLarge</button>',
     '</div>',
 
     // ── Estimate info ────────────────────────────────────────────
@@ -339,8 +341,8 @@ function buildConfigHtml() {
     '"use strict";',
 
     // State
-    'var WW=144, WH=168, SZ=1, HPAD=2;',
-    'var PADDING=50, FONT_PX=[14,18,22], MAX_PAGES=60;',
+    'var WW=144, WH=168, SZ=2, HPAD=2;',
+    'var PADDING=50, FONT_PX=[9,11,14,18,22], FONT_WT=[200,300,400,400,400], MAX_PAGES=60;',
 
     // UI helpers
     'function setPlatform(btn) {',
@@ -367,7 +369,7 @@ function buildConfigHtml() {
     '  var canvas=document.getElementById("c");',
     '  canvas.width=WW; canvas.height=WH;',
     '  var ctx=canvas.getContext("2d"), fpx=FONT_PX[SZ];',
-    '  ctx.font=fpx+"px sans-serif";',
+    '  ctx.font=FONT_WT[SZ]+" "+fpx+"px sans-serif";',
     '  var lines=wrapText(ctx,text,WW-HPAD*2), lh=Math.floor(fpx*1.4);',
     '  var n=Math.max(1,Math.ceil((PADDING+lines.length*lh+PADDING)/WH));',
     '  var kb=Math.round(n*Math.ceil(WW/8)*WH/1024);',
@@ -422,7 +424,7 @@ function buildConfigHtml() {
     '  var canvas=document.getElementById("c");',
     '  canvas.width=WW; canvas.height=WH;',
     '  var ctx=canvas.getContext("2d"), fpx=FONT_PX[SZ], lh=Math.floor(fpx*1.4);',
-    '  ctx.font=fpx+"px sans-serif";',
+    '  ctx.font=FONT_WT[SZ]+" "+fpx+"px sans-serif";',
     '  var lines=wrapText(ctx,text,WW-HPAD*2);',
     '  var totalH=PADDING+lines.length*lh+PADDING;',
     '  var numPages=Math.max(1,Math.min(MAX_PAGES,Math.ceil(totalH/WH)));',
@@ -434,7 +436,7 @@ function buildConfigHtml() {
     '  function renderNext() {',
     '    if (pageN>=numPages){finish(pagesOut,numPages);return;}',
     '    ctx.fillStyle="#000000"; ctx.fillRect(0,0,WW,WH);',
-    '    ctx.fillStyle="#ffffff"; ctx.font=fpx+"px sans-serif";',
+    '    ctx.fillStyle="#ffffff"; ctx.font=FONT_WT[SZ]+" "+fpx+"px sans-serif";',
     '    var offsetY=PADDING-pageN*WH;',
     '    for (var li=0;li<lines.length;li++) {',
     '      var y=offsetY+li*lh+fpx;',
