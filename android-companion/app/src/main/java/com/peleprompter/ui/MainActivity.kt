@@ -2,14 +2,18 @@ package com.peleprompter.ui
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.slider.Slider
@@ -21,9 +25,9 @@ import com.peleprompter.model.WatchSettings
  * MainActivity - Peleprompter Android 主畫面
  *
  * 功能：
- * - 文字貼上 / .txt 匯入
+ * - 文字貼上 / .txt 匯入，以來源狀態列清楚顯示目前載入的稿件
  * - 匯入歷史管理
- * - 推送文字到手錶（從頭開始 / 從書籤繼續）
+ * - 推送稿件到手錶（從頭開始 / 從書籤繼續）
  * - 遠端控制手錶的捲動速度和文字大小
  */
 class MainActivity : AppCompatActivity() {
@@ -38,7 +42,6 @@ class MainActivity : AppCompatActivity() {
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             result.data?.data?.let { uri ->
-                // 取得持久化讀取權限
                 try {
                     contentResolver.takePersistableUriPermission(
                         uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -62,7 +65,6 @@ class MainActivity : AppCompatActivity() {
         setupListeners()
         observeViewModel()
 
-        // 處理外部 Intent (開啟 .txt 檔案)
         handleIncomingIntent(intent)
     }
 
@@ -109,13 +111,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
-        // 載入貼上的文字
+        // TextWatcher：有內容時才啟用「Use Pasted Text」按鈕
+        binding.etTextContent.addTextChangedListener(object : TextWatcher {
+            override fun afterTextChanged(s: Editable?) {
+                binding.btnLoadText.isEnabled = !s.isNullOrBlank()
+            }
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        })
+
+        // 使用貼上的文字
         binding.btnLoadText.setOnClickListener {
             val text = binding.etTextContent.text.toString()
             if (text.isBlank()) {
                 Toast.makeText(this, "Please paste some text first", Toast.LENGTH_SHORT).show()
             } else {
                 viewModel.loadFromPastedText(text)
+                binding.etTextContent.clearFocus()
             }
         }
 
@@ -130,6 +142,19 @@ class MainActivity : AppCompatActivity() {
             filePickerLauncher.launch(intent)
         }
 
+        // 清除目前稿件
+        binding.btnClearScript.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("Clear Script")
+                .setMessage("Remove the current script?")
+                .setPositiveButton("Clear") { _, _ ->
+                    viewModel.clearCurrentDocument()
+                    binding.etTextContent.setText("")
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+
         // 推送到手錶
         binding.btnPushFromStart.setOnClickListener {
             viewModel.pushToWatchFromBeginning()
@@ -141,7 +166,7 @@ class MainActivity : AppCompatActivity() {
 
         // 開啟 Watch Emulator
         binding.btnOpenEmulator.setOnClickListener {
-            startActivity(android.content.Intent(this, WatchEmulatorActivity::class.java))
+            startActivity(Intent(this, WatchEmulatorActivity::class.java))
         }
 
         // 捲動速度滑桿
@@ -157,9 +182,9 @@ class MainActivity : AppCompatActivity() {
         binding.toggleTextSize.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (isChecked) {
                 val size = when (checkedId) {
-                    R.id.btnSizeSmall -> WatchSettings.SIZE_SMALL
+                    R.id.btnSizeSmall  -> WatchSettings.SIZE_SMALL
                     R.id.btnSizeMedium -> WatchSettings.SIZE_MEDIUM
-                    R.id.btnSizeLarge -> WatchSettings.SIZE_LARGE
+                    R.id.btnSizeLarge  -> WatchSettings.SIZE_LARGE
                     else -> return@addOnButtonCheckedListener
                 }
                 viewModel.setTextSize(size)
@@ -172,21 +197,38 @@ class MainActivity : AppCompatActivity() {
     // ================================================================
 
     private fun observeViewModel() {
+        // 來源類型變更 → 更新來源狀態列
+        viewModel.sourceType.observe(this) { sourceType ->
+            updateSourceBadge(sourceType)
+        }
+
+        // 文件載入 → 更新「Send to Watch」卡片
         viewModel.currentDocument.observe(this) { doc ->
             if (doc != null) {
-                binding.cardDocInfo.visibility = View.VISIBLE
-                binding.tvDocTitle.text = doc.title
-                binding.tvDocInfo.text = "${doc.totalLength} characters"
-
-                // 顯示/隱藏 Resume 按鈕
-                binding.btnPushResume.isEnabled = doc.hasBookmark
-                if (doc.hasBookmark) {
-                    binding.btnPushResume.text = "Resume (${doc.bookmarkOffset})"
-                } else {
-                    binding.btnPushResume.text = "Resume"
+                val icon = when (viewModel.sourceType.value) {
+                    MainViewModel.SourceType.FILE  -> "📄"
+                    MainViewModel.SourceType.PASTE -> "📋"
+                    else                           -> "📋"
                 }
+                binding.tvDocTitle.text = "$icon  ${doc.title}"
+                binding.tvDocTitle.setTextColor(0xFFFFFFFF.toInt())
+                binding.tvDocTitle.setTypeface(null, Typeface.BOLD)
+                binding.tvDocInfo.text = "${doc.totalLength} characters"
+                binding.tvDocInfo.visibility = View.VISIBLE
+
+                binding.btnPushFromStart.isEnabled = true
+                binding.btnPushResume.isEnabled = doc.hasBookmark
+                binding.btnPushResume.text = if (doc.hasBookmark)
+                    "Resume (${doc.bookmarkOffset})" else "Resume"
             } else {
-                binding.cardDocInfo.visibility = View.GONE
+                // 無稿件狀態
+                binding.tvDocTitle.text = "No script loaded — select one above"
+                binding.tvDocTitle.setTextColor(0xFF555555.toInt())
+                binding.tvDocTitle.setTypeface(null, Typeface.ITALIC)
+                binding.tvDocInfo.visibility = View.GONE
+                binding.btnPushFromStart.isEnabled = false
+                binding.btnPushResume.isEnabled = false
+                binding.btnPushResume.text = "Resume"
             }
         }
 
@@ -209,19 +251,67 @@ class MainActivity : AppCompatActivity() {
             val sizeButtonId = when (settings.textSize) {
                 WatchSettings.SIZE_SMALL -> R.id.btnSizeSmall
                 WatchSettings.SIZE_LARGE -> R.id.btnSizeLarge
-                else -> R.id.btnSizeMedium
+                else                     -> R.id.btnSizeMedium
             }
             binding.toggleTextSize.check(sizeButtonId)
         }
 
         viewModel.bookmarkOffset.observe(this) { offset ->
-            val doc = viewModel.currentDocument.value ?: return@observe
             binding.btnPushResume.isEnabled = true
             binding.btnPushResume.text = "Resume ($offset)"
         }
 
         viewModel.statusMessage.observe(this) { msg ->
             binding.tvStatus.text = msg
+        }
+    }
+
+    // ================================================================
+    // 來源狀態列更新
+    // ================================================================
+
+    private fun updateSourceBadge(sourceType: MainViewModel.SourceType) {
+        val doc = viewModel.currentDocument.value
+
+        when (sourceType) {
+            MainViewModel.SourceType.NONE -> {
+                binding.layoutSourceBadge.background =
+                    ContextCompat.getDrawable(this, R.drawable.source_badge_empty)
+                binding.tvSourceIcon.text = ""
+                binding.tvSourceName.text = "No script loaded"
+                binding.tvSourceName.setTextColor(0xFF555555.toInt())
+                binding.tvSourceName.setTypeface(null, Typeface.ITALIC)
+                binding.tvSourceDetail.visibility = View.GONE
+                binding.btnClearScript.visibility = View.GONE
+            }
+
+            MainViewModel.SourceType.PASTE -> {
+                binding.layoutSourceBadge.background =
+                    ContextCompat.getDrawable(this, R.drawable.source_badge_loaded)
+                binding.tvSourceIcon.text = "📋"
+                binding.tvSourceName.text = "Pasted text"
+                binding.tvSourceName.setTextColor(0xFF90CAF9.toInt())
+                binding.tvSourceName.setTypeface(null, Typeface.BOLD)
+                doc?.let {
+                    binding.tvSourceDetail.text = "${it.totalLength} characters"
+                    binding.tvSourceDetail.visibility = View.VISIBLE
+                }
+                binding.btnClearScript.visibility = View.VISIBLE
+            }
+
+            MainViewModel.SourceType.FILE -> {
+                binding.layoutSourceBadge.background =
+                    ContextCompat.getDrawable(this, R.drawable.source_badge_loaded)
+                binding.tvSourceIcon.text = "📄"
+                binding.tvSourceName.text = doc?.title ?: "Imported file"
+                binding.tvSourceName.setTextColor(0xFF90CAF9.toInt())
+                binding.tvSourceName.setTypeface(null, Typeface.BOLD)
+                doc?.let {
+                    binding.tvSourceDetail.text = "${it.totalLength} characters"
+                    binding.tvSourceDetail.visibility = View.VISIBLE
+                }
+                binding.btnClearScript.visibility = View.VISIBLE
+            }
         }
     }
 
