@@ -39,7 +39,10 @@ object PebbleProtocol {
     const val IMAGE_CHUNK_DATA_SIZE = 1900
 
     // ── 文字大小常數 ─────────────────────────────────────────────
-    const val TEXT_SIZE_SMALL  = 0
-    const val TEXT_SIZE_MEDIUM = 1
-    const val TEXT_SIZE_LARGE  = 2
+    // 注意：原 SMALL=0/MEDIUM=1/LARGE=2 已整體上移 +2，舊存值透過手錶端遷移處理
+    const val TEXT_SIZE_TINY   = 0   // 10px — 細筆畫
+    const val TEXT_SIZE_SMALL  = 1   // 13px — 細筆畫
+    const val TEXT_SIZE_MEDIUM = 2   // 16px — 原 Small
+    const val TEXT_SIZE_LARGE  = 3   // 22px — 原 Medium
+    const val TEXT_SIZE_XLARGE = 4   // 28px — 原 Large
 }

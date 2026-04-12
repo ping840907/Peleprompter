@@ -48,15 +48,21 @@ data class TextDocument(
  * WatchSettings - 手錶端設定
  */
 data class WatchSettings(
-    var scrollSpeed: Int = 3,        // 捲動速度 1-6
-    var textSize: Int = 1            // 文字大小 0=小, 1=中, 2=大
+    var scrollSpeed: Int = 3,                       // 捲動速度 1-6
+    var textSize: Int = SIZE_MEDIUM,                // 文字大小（見下方常數）
+    var settingsVersion: Int = 0                    // 用於從舊 3 等級遷移至新 5 等級
 ) {
     companion object {
         const val SPEED_MIN = 1
         const val SPEED_MAX = 6
-        const val SIZE_SMALL = 0
-        const val SIZE_MEDIUM = 1
-        const val SIZE_LARGE = 2
+        const val SIZE_TINY   = 0   // 10px — 細筆畫（新）
+        const val SIZE_SMALL  = 1   // 13px — 細筆畫（新）
+        const val SIZE_MEDIUM = 2   // 16px — 原 Small
+        const val SIZE_LARGE  = 3   // 22px — 原 Medium
+        const val SIZE_XLARGE = 4   // 28px — 原 Large
+
+        /** 設定系統版本：舊存值 settingsVersion < CURRENT_VERSION 時需要遷移 */
+        const val CURRENT_VERSION = 1
     }
 }
 

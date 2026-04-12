@@ -16,6 +16,11 @@
 
 'use strict';
 
+// CloudPebble 模擬器偵測（platform === 'pypkjs' 表示在 CloudPebble 中執行）
+var EMULATOR = (typeof Pebble === 'undefined') || (Pebble.platform === 'pypkjs');
+// 代理頁面負責在 CloudPebble 中開啟 config 頁面（需啟用 GitHub Pages）
+var PROXY_URL = 'https://ping840907.github.io/peleprompter/config-proxy.html#';
+
 // ══════════════════════════════════════════════════════════════════
 // 協定常數（與 constants.h 完全一致）
 // ══════════════════════════════════════════════════════════════════
@@ -170,7 +175,16 @@ function sendPageInChunks(pageNum, data) {
 // 設定頁面
 // ══════════════════════════════════════════════════════════════════
 Pebble.addEventListener('showConfiguration', function() {
-  Pebble.openURL('data:text/html;charset=utf-8,' + encodeURIComponent(buildConfigHtml()));
+  var html = buildConfigHtml();
+  if (EMULATOR) {
+    // CloudPebble: 透過 GitHub Pages 代理頁面開啟
+    // $$RETURN_TO$$ 由代理替換成 CloudPebble 注入的 return_to URL
+    Pebble.openURL(PROXY_URL + encodeURIComponent(html));
+  } else {
+    // 實機：將 $$RETURN_TO$$ 替換為 pebblejs://close# 後以 data URI 開啟
+    var deviceHtml = html.split('$$RETURN_TO$$').join('pebblejs://close#');
+    Pebble.openURL('data:text/html;charset=utf-8,' + encodeURIComponent(deviceHtml));
+  }
 });
 
 Pebble.addEventListener('webviewclosed', function(e) {
@@ -304,9 +318,11 @@ function buildConfigHtml() {
     // ── Text size selector ───────────────────────────────────────
     '<label class="label">Text Size</label>',
     '<div class="btn-row" id="sizeRow">',
-    '  <button class="seg-btn"        data-sz="0" onclick="setSize(this)">Small</button>',
-    '  <button class="seg-btn active" data-sz="1" onclick="setSize(this)">Medium</button>',
-    '  <button class="seg-btn"        data-sz="2" onclick="setSize(this)">Large</button>',
+    '  <button class="seg-btn"        data-sz="0" onclick="setSize(this)">Tiny</button>',
+    '  <button class="seg-btn"        data-sz="1" onclick="setSize(this)">Small</button>',
+    '  <button class="seg-btn active" data-sz="2" onclick="setSize(this)">Medium</button>',
+    '  <button class="seg-btn"        data-sz="3" onclick="setSize(this)">Large</button>',
+    '  <button class="seg-btn"        data-sz="4" onclick="setSize(this)">XLarge</button>',
     '</div>',
 
     // ── Estimate info ────────────────────────────────────────────
@@ -325,8 +341,8 @@ function buildConfigHtml() {
     '"use strict";',
 
     // State
-    'var WW=144, WH=168, SZ=1, HPAD=2;',
-    'var PADDING=50, FONT_PX=[14,18,22], MAX_PAGES=60;',
+    'var WW=144, WH=168, SZ=2, HPAD=2;',
+    'var PADDING=50, FONT_PX=[9,11,14,18,22], FONT_WT=[200,300,400,400,400], MAX_PAGES=60;',
 
     // UI helpers
     'function setPlatform(btn) {',
@@ -353,7 +369,7 @@ function buildConfigHtml() {
     '  var canvas=document.getElementById("c");',
     '  canvas.width=WW; canvas.height=WH;',
     '  var ctx=canvas.getContext("2d"), fpx=FONT_PX[SZ];',
-    '  ctx.font=fpx+"px sans-serif";',
+    '  ctx.font=FONT_WT[SZ]+" "+fpx+"px sans-serif";',
     '  var lines=wrapText(ctx,text,WW-HPAD*2), lh=Math.floor(fpx*1.4);',
     '  var n=Math.max(1,Math.ceil((PADDING+lines.length*lh+PADDING)/WH));',
     '  var kb=Math.round(n*Math.ceil(WW/8)*WH/1024);',
@@ -408,7 +424,7 @@ function buildConfigHtml() {
     '  var canvas=document.getElementById("c");',
     '  canvas.width=WW; canvas.height=WH;',
     '  var ctx=canvas.getContext("2d"), fpx=FONT_PX[SZ], lh=Math.floor(fpx*1.4);',
-    '  ctx.font=fpx+"px sans-serif";',
+    '  ctx.font=FONT_WT[SZ]+" "+fpx+"px sans-serif";',
     '  var lines=wrapText(ctx,text,WW-HPAD*2);',
     '  var totalH=PADDING+lines.length*lh+PADDING;',
     '  var numPages=Math.max(1,Math.min(MAX_PAGES,Math.ceil(totalH/WH)));',
@@ -420,7 +436,7 @@ function buildConfigHtml() {
     '  function renderNext() {',
     '    if (pageN>=numPages){finish(pagesOut,numPages);return;}',
     '    ctx.fillStyle="#000000"; ctx.fillRect(0,0,WW,WH);',
-    '    ctx.fillStyle="#ffffff"; ctx.font=fpx+"px sans-serif";',
+    '    ctx.fillStyle="#ffffff"; ctx.font=FONT_WT[SZ]+" "+fpx+"px sans-serif";',
     '    var offsetY=PADDING-pageN*WH;',
     '    for (var li=0;li<lines.length;li++) {',
     '      var y=offsetY+li*lh+fpx;',
@@ -439,11 +455,15 @@ function buildConfigHtml() {
     '}',
 
     // Send result back to PebbleKit JS
+    // $$RETURN_TO$$ is replaced at runtime:
+    //   real device  → "pebblejs://close#"  (via data URI in showConfiguration)
+    //   CloudPebble  → injected return URL   (via config-proxy.html)
+    'var RETURN_TO="$$RETURN_TO$$";',
     'function finish(pagesOut,n) {',
     '  setStatus("Done! "+n+(n>1?" pages":" page")+" rendered. Sending to watch...","ok");',
     '  var result={pages:pagesOut,totalPages:n,watchWidth:WW,watchHeight:WH,textSize:SZ};',
     '  try {',
-    '    document.location="pebblejs://close#"+encodeURIComponent(JSON.stringify(result));',
+    '    document.location=RETURN_TO+encodeURIComponent(JSON.stringify(result));',
     '  } catch(e) {',
     '    setStatus("Error: "+e.message,"error");',
     '    document.getElementById("btnRender").disabled=false;',

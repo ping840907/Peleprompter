@@ -60,7 +60,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val statusMessage: LiveData<String> = _statusMessage
 
     init {
-        _watchSettings.value = prefs.getWatchSettings()
+        // 從舊 3 等級（0/1/2）遷移至新 5 等級（0-4）：舊值整體上移 +2
+        val rawSettings = prefs.getWatchSettings()
+        if (rawSettings.settingsVersion < WatchSettings.CURRENT_VERSION) {
+            if (rawSettings.textSize in 0..2) rawSettings.textSize += 2
+            rawSettings.settingsVersion = WatchSettings.CURRENT_VERSION
+            prefs.saveWatchSettings(rawSettings)
+        }
+        _watchSettings.value = rawSettings
         refreshHistory()
 
         // 設定通訊回呼
@@ -272,7 +279,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** 更新文字大小並推送到手錶 */
     fun setTextSize(size: Int) {
         val settings = _watchSettings.value ?: WatchSettings()
-        settings.textSize = size.coerceIn(WatchSettings.SIZE_SMALL, WatchSettings.SIZE_LARGE)
+        settings.textSize = size.coerceIn(WatchSettings.SIZE_TINY, WatchSettings.SIZE_XLARGE)
         _watchSettings.value = settings
         commManager.pushSettingsToWatch(settings)
     }

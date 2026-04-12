@@ -23,7 +23,7 @@ static SettingsChangedCallback s_change_callback = NULL;
 #define SECTION_STATUSBAR 2
 #define NUM_SECTIONS      3
 
-static const char *SIZE_NAMES[] = { "Small", "Medium", "Large" };
+static const char *SIZE_NAMES[] = { "Tiny", "Small", "Medium", "Large", "XLarge" };
 
 // ============================================================
 // MenuLayer 回呼
@@ -37,7 +37,7 @@ static uint16_t menu_get_num_rows(MenuLayer *menu_layer, uint16_t section_index,
                                   void *data) {
     switch (section_index) {
         case SECTION_SPEED:     return SCROLL_SPEED_MAX;  // 6 個速度等級
-        case SECTION_SIZE:      return 3;                  // 小/中/大
+        case SECTION_SIZE:      return 5;                  // Tiny/Small/Medium/Large/XLarge
         case SECTION_STATUSBAR: return 1;                  // 開/關切換
         default: return 0;
     }

@@ -182,9 +182,11 @@ class MainActivity : AppCompatActivity() {
         binding.toggleTextSize.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (isChecked) {
                 val size = when (checkedId) {
+                    R.id.btnSizeTiny   -> WatchSettings.SIZE_TINY
                     R.id.btnSizeSmall  -> WatchSettings.SIZE_SMALL
                     R.id.btnSizeMedium -> WatchSettings.SIZE_MEDIUM
                     R.id.btnSizeLarge  -> WatchSettings.SIZE_LARGE
+                    R.id.btnSizeXLarge -> WatchSettings.SIZE_XLARGE
                     else -> return@addOnButtonCheckedListener
                 }
                 viewModel.setTextSize(size)
@@ -249,9 +251,11 @@ class MainActivity : AppCompatActivity() {
             binding.tvSpeedValue.text = settings.scrollSpeed.toString()
 
             val sizeButtonId = when (settings.textSize) {
-                WatchSettings.SIZE_SMALL -> R.id.btnSizeSmall
-                WatchSettings.SIZE_LARGE -> R.id.btnSizeLarge
-                else                     -> R.id.btnSizeMedium
+                WatchSettings.SIZE_TINY   -> R.id.btnSizeTiny
+                WatchSettings.SIZE_SMALL  -> R.id.btnSizeSmall
+                WatchSettings.SIZE_LARGE  -> R.id.btnSizeLarge
+                WatchSettings.SIZE_XLARGE -> R.id.btnSizeXLarge
+                else                      -> R.id.btnSizeMedium
             }
             binding.toggleTextSize.check(sizeButtonId)
         }

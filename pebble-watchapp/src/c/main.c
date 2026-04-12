@@ -391,6 +391,7 @@ static void select_short_click(ClickRecognizerRef recognizer, void *context) {
 }
 
 static void on_settings_changed(int32_t speed, TextSizeLevel size, bool show_status_bar);
+static void apply_status_bar(void);
 
 static void select_long_click(ClickRecognizerRef recognizer, void *context) {
     settings_window_push(s_scroll_speed, s_text_size, s_show_status_bar, on_settings_changed);
@@ -470,7 +471,7 @@ static void on_settings_synced(int32_t scroll_speed, int32_t text_size) {
         persist_write_int(PERSIST_KEY_SCROLL_SPEED, s_scroll_speed);
     }
 
-    if (text_size >= TEXT_SIZE_SMALL && text_size <= TEXT_SIZE_LARGE) {
+    if (text_size >= TEXT_SIZE_TINY && text_size <= TEXT_SIZE_XLARGE) {
         if ((TextSizeLevel)text_size != s_text_size) {
             s_text_size  = (TextSizeLevel)text_size;
             persist_write_int(PERSIST_KEY_TEXT_SIZE, (int32_t)s_text_size);
@@ -651,7 +652,10 @@ static void init(void) {
     }
     if (persist_exists(PERSIST_KEY_TEXT_SIZE)) {
         int32_t size_val = persist_read_int(PERSIST_KEY_TEXT_SIZE);
-        if (size_val >= TEXT_SIZE_SMALL && size_val <= TEXT_SIZE_LARGE) {
+        // 遷移：舊版只有 3 個等級 (0/1/2)，新版往下新增兩個更小等級，
+        // 舊值整體上移 2（0→2, 1→3, 2→4），確保視覺大小不變。
+        if (size_val >= 0 && size_val <= 2) size_val += 2;
+        if (size_val >= TEXT_SIZE_TINY && size_val <= TEXT_SIZE_XLARGE) {
             s_text_size = (TextSizeLevel)size_val;
         }
     }

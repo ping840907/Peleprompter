@@ -34,9 +34,11 @@
 // 文字大小列舉
 // ============================================================
 typedef enum {
-    TEXT_SIZE_SMALL  = 0,
-    TEXT_SIZE_MEDIUM = 1,
-    TEXT_SIZE_LARGE  = 2
+    TEXT_SIZE_TINY   = 0,   // 9px  (index.js) / 10px (Android) — 細筆畫
+    TEXT_SIZE_SMALL  = 1,   // 11px (index.js) / 13px (Android) — 細筆畫
+    TEXT_SIZE_MEDIUM = 2,   // 14px (index.js) / 16px (Android) — 原 Small
+    TEXT_SIZE_LARGE  = 3,   // 18px (index.js) / 22px (Android) — 原 Medium
+    TEXT_SIZE_XLARGE = 4    // 22px (index.js) / 28px (Android) — 原 Large
 } TextSizeLevel;
 
 // ============================================================

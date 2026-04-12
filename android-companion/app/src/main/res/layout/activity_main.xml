@@ -345,13 +345,24 @@
                         app:selectionRequired="true">
 
                         <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnSizeTiny"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Tiny"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp" />
+
+                        <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnSizeSmall"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="Small"
                             style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:textColor="#FFFFFF" />
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnSizeMedium"
@@ -360,7 +371,8 @@
                             android:layout_weight="1"
                             android:text="Medium"
                             style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:textColor="#FFFFFF" />
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnSizeLarge"
@@ -369,7 +381,18 @@
                             android:layout_weight="1"
                             android:text="Large"
                             style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:textColor="#FFFFFF" />
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnSizeXLarge"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="XLarge"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp" />
                     </com.google.android.material.button.MaterialButtonToggleGroup>
 
                 </LinearLayout>
