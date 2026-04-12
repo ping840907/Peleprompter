@@ -192,12 +192,6 @@ Accessible from the Pebble mobile app's settings gear. The config page is built 
 
 > **Prerequisite:** Enable GitHub Pages on this repository (Settings → Pages → branch: main, folder: `/`) for CloudPebble support to work.
 
-## App UUID
-
-```
-1ced8e88-c6d6-476d-8f55-dc51edf6d9a7
-```
-
 ## Building
 
 ### Pebble Watchapp
