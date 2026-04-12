@@ -9,7 +9,7 @@
   "dependencies": {},
   "pebble": {
     "displayName": "Peleprompter",
-    "uuid": "1ced8e88-c6d6-476d-8f55-dc51edf6d9a7",
+    "uuid": "aeae6be1-da66-49f9-8120-53243a5c9f92",
     "sdkVersion": "3",
     "enableMultiJS": true,
     "targetPlatforms": [
