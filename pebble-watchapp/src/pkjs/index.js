@@ -19,7 +19,7 @@
 // CloudPebble 模擬器偵測（platform === 'pypkjs' 表示在 CloudPebble 中執行）
 var EMULATOR = (typeof Pebble === 'undefined') || (Pebble.platform === 'pypkjs');
 // 代理頁面負責在 CloudPebble 中開啟 config 頁面（需啟用 GitHub Pages）
-var PROXY_URL = 'https://ping840907.github.io/peleprompter/config-proxy.html#';
+var PROXY_URL = 'https://ping840907.github.io/Peleprompter/config-proxy.html#';
 
 // ══════════════════════════════════════════════════════════════════
 // 協定常數（與 constants.h 完全一致）
