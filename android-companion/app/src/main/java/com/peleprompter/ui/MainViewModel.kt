@@ -10,6 +10,7 @@ import com.peleprompter.model.ImportHistoryEntry
 import com.peleprompter.model.TextDocument
 import com.peleprompter.model.WatchSettings
 import com.peleprompter.service.PebbleCommManager
+import com.peleprompter.util.EpubTextExtractor
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileInputStream
@@ -132,15 +133,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return Uri.fromFile(file).toString()
     }
 
-    /** 從 .txt 檔案 URI 匯入 */
+    /** 從 .txt 或 .epub 檔案 URI 匯入 */
     fun loadFromFileUri(uri: Uri, fileName: String? = null) {
         try {
             val context = getApplication<PeleprompterApp>()
             val inputStream = context.contentResolver.openInputStream(uri)
                 ?: throw Exception("Cannot open file")
 
-            // use{} 會自動關閉 BufferedReader → InputStreamReader → inputStream
-            val text = BufferedReader(InputStreamReader(inputStream)).use { it.readText() }
+            val isEpub = fileName?.endsWith(".epub", ignoreCase = true) == true ||
+                         context.contentResolver.getType(uri) == "application/epub+zip"
+
+            val text = if (isEpub) {
+                EpubTextExtractor.extract(inputStream).also { inputStream.close() }
+            } else {
+                BufferedReader(InputStreamReader(inputStream)).use { it.readText() }
+            }
 
             if (text.isBlank()) {
                 _statusMessage.value = "File is empty"

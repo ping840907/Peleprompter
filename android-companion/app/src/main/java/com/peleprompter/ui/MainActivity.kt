@@ -131,11 +131,13 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 匯入 .txt 檔案
+        // 匯入 .txt / .epub 檔案
         binding.btnImportFile.setOnClickListener {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
-                type = "text/plain"
+                type = "*/*"
+                putExtra(Intent.EXTRA_MIME_TYPES,
+                    arrayOf("text/plain", "application/epub+zip"))
                 addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }

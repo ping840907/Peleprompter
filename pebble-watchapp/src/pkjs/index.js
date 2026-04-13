@@ -19,7 +19,7 @@
 // CloudPebble 模擬器偵測（platform === 'pypkjs' 表示在 CloudPebble 中執行）
 var EMULATOR = (typeof Pebble === 'undefined') || (Pebble.platform === 'pypkjs');
 // 代理頁面負責在 CloudPebble 中開啟 config 頁面（需啟用 GitHub Pages）
-var PROXY_URL = 'https://ping840907.github.io/peleprompter/config-proxy.html#';
+var PROXY_URL = 'https://ping840907.github.io/Peleprompter/config-proxy.html#';
 
 // ══════════════════════════════════════════════════════════════════
 // 協定常數（與 constants.h 完全一致）
@@ -194,16 +194,30 @@ Pebble.addEventListener('webviewclosed', function(e) {
   }
   try {
     var result = JSON.parse(decodeURIComponent(e.response));
-    if (!result || !Array.isArray(result.pages) || result.pages.length === 0) {
-      console.log('[pkjs] Config returned empty page set');
-      return;
-    }
 
-    pages       = result.pages.map(base64ToArray);
-    totalPages  = result.totalPages  || pages.length;
     watchWidth  = result.watchWidth  || 144;
     watchHeight = result.watchHeight || 168;
-    textSize    = result.textSize    != null ? result.textSize : 1;
+    textSize    = result.textSize    != null ? result.textSize : 2;
+
+    if (result.text) {
+      // CloudPebble path: URL length limit prevents passing bitmaps via redirect.
+      // Render pages locally using the Node.js canvas module (available in pypkjs).
+      var hpad = result.hpad != null ? result.hpad : 2;
+      var rendered = renderAllPagesFromText(result.text, watchWidth, watchHeight, hpad, textSize);
+      if (!rendered || rendered.length === 0) {
+        console.log('[pkjs] Rendering failed – canvas may not be available in this environment');
+        return;
+      }
+      pages = rendered;
+      totalPages = pages.length;
+    } else if (Array.isArray(result.pages) && result.pages.length > 0) {
+      // Real device path: config page pre-rendered pages and passed them via URL.
+      pages      = result.pages.map(base64ToArray);
+      totalPages = result.totalPages || pages.length;
+    } else {
+      console.log('[pkjs] Config returned no usable data');
+      return;
+    }
 
     console.log('[pkjs] Loaded ' + totalPages + ' pages (' +
                 watchWidth + 'x' + watchHeight + ' textSize=' + textSize + ')');
@@ -213,8 +227,8 @@ Pebble.addEventListener('webviewclosed', function(e) {
         totalPages: totalPages, watchWidth: watchWidth,
         watchHeight: watchHeight, textSize: textSize
       }));
-      result.pages.forEach(function(b64, i) {
-        localStorage.setItem('pele_page_' + i, b64);
+      pages.forEach(function(bytes, i) {
+        localStorage.setItem('pele_page_' + i, arrayToBase64(bytes));
       });
     } catch (lsErr) {
       console.log('[pkjs] localStorage save failed: ' + lsErr);
@@ -226,10 +240,106 @@ Pebble.addEventListener('webviewclosed', function(e) {
 });
 
 function base64ToArray(b64) {
+  if (typeof Buffer !== 'undefined') {
+    var buf = Buffer.from(b64, 'base64');
+    var arr = new Array(buf.length);
+    for (var i = 0; i < buf.length; i++) arr[i] = buf[i];
+    return arr;
+  }
   var binary = atob(b64);
   var arr = new Array(binary.length);
   for (var i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
   return arr;
+}
+
+function arrayToBase64(arr) {
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(arr).toString('base64');
+  }
+  var s = '';
+  for (var i = 0; i < arr.length; i++) s += String.fromCharCode(arr[i]);
+  return btoa(s);
+}
+
+// ── On-device renderer (used in CloudPebble / pypkjs via require('canvas')) ──
+var RENDER_FONT_PX   = [9, 11, 14, 18, 22];
+var RENDER_FONT_WT   = [200, 300, 400, 400, 400];
+var RENDER_PADDING   = 50;
+var RENDER_MAX_PAGES = 60;
+
+function renderAllPagesFromText(text, w, h, hpad, szLevel) {
+  var Canvas;
+  try { Canvas = require('canvas'); } catch (e) {
+    console.log('[pkjs] canvas not available: ' + e);
+    return null;
+  }
+  var createFn = (typeof Canvas.createCanvas === 'function')
+    ? Canvas.createCanvas
+    : function(ww, hh) { return new Canvas(ww, hh); };
+
+  var fpx = RENDER_FONT_PX[szLevel] || 14;
+  var fwt = RENDER_FONT_WT[szLevel] || 400;
+  var lh  = Math.floor(fpx * 1.4);
+  var fontStr = fwt + ' ' + fpx + 'px sans-serif';
+
+  var mc   = createFn(w, h);
+  var mctx = mc.getContext('2d');
+  mctx.font = fontStr;
+  var lines  = renderWrapText(mctx, text, w - hpad * 2);
+  var totalH = RENDER_PADDING + lines.length * lh + RENDER_PADDING;
+  var numPages = Math.max(1, Math.min(RENDER_MAX_PAGES, Math.ceil(totalH / h)));
+  console.log('[pkjs] Rendering ' + numPages + ' page(s) ' + w + 'x' + h + ' sz=' + szLevel);
+
+  var out = [];
+  for (var pageN = 0; pageN < numPages; pageN++) {
+    var pc  = createFn(w, h);
+    var ctx = pc.getContext('2d');
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = fontStr;
+    var offsetY = RENDER_PADDING - pageN * h;
+    for (var li = 0; li < lines.length; li++) {
+      var y = offsetY + li * lh + fpx;
+      if (y > h + lh) break;
+      if (y + lh < 0) continue;
+      ctx.fillText(lines[li], hpad, y);
+    }
+    out.push(renderEncode1Bit(ctx.getImageData(0, 0, w, h), w, h));
+  }
+  console.log('[pkjs] Done: ' + out.length + ' page(s)');
+  return out;
+}
+
+function renderWrapText(ctx, text, maxW) {
+  var lines = [], paras = text.split('\n');
+  for (var p = 0; p < paras.length; p++) {
+    var para = paras[p];
+    if (!para.trim()) { lines.push(''); continue; }
+    var words = para.split(' '), line = '';
+    for (var i = 0; i < words.length; i++) {
+      var test = line ? line + ' ' + words[i] : words[i];
+      if (ctx.measureText(test).width <= maxW) { line = test; }
+      else { if (line) lines.push(line); line = words[i]; }
+    }
+    if (line) lines.push(line);
+  }
+  return lines;
+}
+
+function renderEncode1Bit(imageData, w, h) {
+  var stride = Math.ceil(w / 8);
+  var result = new Array(stride * h);
+  for (var k = 0; k < result.length; k++) result[k] = 0;
+  var d = imageData.data;
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      var idx  = (y * w + x) * 4;
+      var luma = 0.299 * d[idx] + 0.587 * d[idx + 1] + 0.114 * d[idx + 2];
+      if (luma > 64) result[y * stride + (x >> 3)] |= (0x80 >> (x & 7));
+    }
+  }
+  return result;
 }
 
 // ── 從 localStorage 恢復上次的頁面資料 ──────────────────────────
@@ -304,15 +414,20 @@ function buildConfigHtml() {
 
     // ── Text input ──────────────────────────────────────────────
     '<label class="label">Text Content</label>',
-    '<textarea id="txt" placeholder="Paste your script here..." oninput="onTextChange()"></textarea>',
+    '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">',
+    '  <button class="seg-btn" style="flex:none;padding:8px 16px;font-size:13px" onclick="triggerFileInput()">&#x1F4C2; Import file</button>',
+    '  <span id="fileLabel" style="color:#888;font-size:12px">.txt &amp; .epub supported</span>',
+    '</div>',
+    '<input type="file" id="fileIn" accept=".txt,.epub,text/plain,application/epub+zip" style="display:none" onchange="onFileSelected(this)">',
+    '<textarea id="txt" placeholder="Or paste your script here..." oninput="onTextChange()"></textarea>',
 
     // ── Platform selector ────────────────────────────────────────
     '<label class="label">Platform</label>',
     '<div class="btn-row" id="platRow">',
-    '  <button class="seg-btn active" data-w="144" data-h="168" data-hpad="2"  onclick="setPlatform(this)">Aplite / Basalt<br>144&#xD7;168</button>',
-    '  <button class="seg-btn"        data-w="180" data-h="180" data-hpad="20" onclick="setPlatform(this)">Chalk<br>180&#xD7;180</button>',
-    '  <button class="seg-btn"        data-w="200" data-h="228" data-hpad="2"  onclick="setPlatform(this)">Emery<br>200&#xD7;228</button>',
-    '  <button class="seg-btn"        data-w="260" data-h="260" data-hpad="30" onclick="setPlatform(this)">Gabbro<br>260&#xD7;260</button>',
+    '  <button class="seg-btn active" data-w="144" data-h="168" data-hpad="2"  onclick="setPlatform(this)">Aplite/Basalt<br><span style="color:#888;font-size:10px">Pebble&#xB7;Time</span><br>144&#xD7;168</button>',
+    '  <button class="seg-btn"        data-w="180" data-h="180" data-hpad="20" onclick="setPlatform(this)">Chalk<br><span style="color:#888;font-size:10px">Time Round</span><br>180&#xD7;180</button>',
+    '  <button class="seg-btn"        data-w="200" data-h="228" data-hpad="2"  onclick="setPlatform(this)">Emery<br><span style="color:#888;font-size:10px">Time 2</span><br>200&#xD7;228</button>',
+    '  <button class="seg-btn"        data-w="260" data-h="260" data-hpad="30" onclick="setPlatform(this)">Gabbro<br><span style="color:#888;font-size:10px">Round 2</span><br>260&#xD7;260</button>',
     '</div>',
 
     // ── Text size selector ───────────────────────────────────────
@@ -361,6 +476,103 @@ function buildConfigHtml() {
     '}',
     'function setStatus(msg,cls){var el=document.getElementById("status");el.textContent=msg;el.className=cls||"";}',
     'function onTextChange(){updateEstimate();}',
+
+    // ── File import (.txt and .epub) ─────────────────────────────
+    'function triggerFileInput(){document.getElementById("fileIn").click();}',
+    'function onFileSelected(input){',
+    '  var file=input.files&&input.files[0]; if(!file)return;',
+    '  document.getElementById("fileLabel").textContent=file.name;',
+    '  if(file.name.toLowerCase().slice(-5)===".epub"||file.type==="application/epub+zip"){',
+    '    if(typeof DecompressionStream==="undefined"){',
+    '      setStatus("EPUB import requires Chrome 80+ / Firefox 113+ / Safari 16.4+. Use the Android app on older browsers.","warn");',
+    '      return;',
+    '    }',
+    '    setStatus("Parsing EPUB...","");',
+    '    readEpub(file).then(function(text){',
+    '      document.getElementById("txt").value=text;',
+    '      onTextChange();',
+    '      setStatus("Imported "+file.name+" ("+text.length+" chars).","ok");',
+    '    }).catch(function(err){setStatus("EPUB error: "+err.message,"error");});',
+    '  } else {',
+    '    var fr=new FileReader();',
+    '    fr.onload=function(ev){document.getElementById("txt").value=ev.target.result;onTextChange();setStatus("Imported "+file.name+".","ok");};',
+    '    fr.onerror=function(){setStatus("Failed to read file.","error");};',
+    '    fr.readAsText(file);',
+    '  }',
+    '}',
+    // readEpub: parses EPUB (ZIP) entirely in the browser.
+    // Reads ZIP central directory → decompresses with DecompressionStream →
+    // extracts OPF spine → strips HTML from each chapter.
+    'function readEpub(file){',
+    '  return new Promise(function(res,rej){',
+    '    var fr=new FileReader();',
+    '    fr.onload=function(e){res(e.target.result);};',
+    '    fr.onerror=function(){rej(new Error("Read failed"));};',
+    '    fr.readAsArrayBuffer(file);',
+    '  }).then(function(buf){',
+    '    var data=new Uint8Array(buf),view=new DataView(buf),eocd=-1;',
+    '    for(var i=data.length-22;i>=Math.max(0,data.length-65578);i--)',
+    '      if(view.getUint32(i,true)===0x06054b50){eocd=i;break;}',
+    '    if(eocd<0)throw new Error("Not a valid ZIP/EPUB file");',
+    '    var cdOff=view.getUint32(eocd+16,true),cdN=view.getUint16(eocd+8,true),ent={},pos=cdOff;',
+    '    for(var i=0;i<cdN;i++){',
+    '      if(view.getUint32(pos,true)!==0x02014b50)break;',
+    '      var mth=view.getUint16(pos+10,true),cs=view.getUint32(pos+20,true);',
+    '      var nl=view.getUint16(pos+28,true),xl=view.getUint16(pos+30,true),cl=view.getUint16(pos+32,true);',
+    '      var lhO=view.getUint32(pos+42,true);',
+    '      var nm=new TextDecoder().decode(data.subarray(pos+46,pos+46+nl));',
+    '      var lhx=view.getUint16(lhO+28,true),lhn=view.getUint16(lhO+26,true),ds=lhO+30+lhn+lhx;',
+    '      ent[nm]={m:mth,b:data.subarray(ds,ds+cs)};',
+    '      pos+=46+nl+xl+cl;',
+    '    }',
+    '    function dc(e){',
+    '      if(e.m===0)return Promise.resolve(e.b);',
+    '      var s=new DecompressionStream("deflate-raw"),w=s.writable.getWriter();',
+    '      w.write(e.b);w.close();',
+    '      var r=s.readable.getReader(),ch=[];',
+    '      function pump(){return r.read().then(function(x){',
+    '        if(x.done){var t=0;ch.forEach(function(c){t+=c.length;});',
+    '          var o=new Uint8Array(t),f=0;ch.forEach(function(c){o.set(c,f);f+=c.length;});return o;}',
+    '        ch.push(x.value);return pump();',
+    '      });}',
+    '      return pump();',
+    '    }',
+    '    function ge(n){var e=ent[n];return e?dc(e):Promise.resolve(null);}',
+    '    return ge("META-INF/container.xml").then(function(b){',
+    '      if(!b)throw new Error("Missing META-INF/container.xml");',
+    '      var cd=new DOMParser().parseFromString(new TextDecoder().decode(b),"text/xml");',
+    '      var rf=cd.querySelector("rootfile"),opf=rf&&rf.getAttribute("full-path");',
+    '      if(!opf)throw new Error("Cannot find OPF path");',
+    '      var od=opf.lastIndexOf("/"),opfDir=od>=0?opf.slice(0,od):"";',
+    '      return ge(opf).then(function(ob){',
+    '        if(!ob)throw new Error("Cannot read OPF");',
+    '        var od2=new DOMParser().parseFromString(new TextDecoder().decode(ob),"text/xml");',
+    '        var mf={};',
+    '        od2.querySelectorAll("manifest item").forEach(function(it){',
+    '          var id=it.getAttribute("id"),hr=it.getAttribute("href"),mt=it.getAttribute("media-type")||"";',
+    '          if(id&&hr&&(mt.indexOf("html")>=0||hr.toLowerCase().slice(-5)===".html"||hr.toLowerCase().slice(-6)===".xhtml"))mf[id]=hr;',
+    '        });',
+    '        var sp=[];od2.querySelectorAll("spine itemref").forEach(function(r){var v=r.getAttribute("idref");if(v)sp.push(v);});',
+    '        var idx=0,parts=[];',
+    '        function next(){',
+    '          if(idx>=sp.length)return Promise.resolve(parts.join("\\n\\n").trim());',
+    '          var hr=mf[sp[idx++]];if(!hr)return next();',
+    '          var dec=decodeURIComponent(hr),fp=opfDir?opfDir+"/"+dec:dec;',
+    '          return ge(fp).then(function(b2){return b2||ge(dec);}).then(function(b2){',
+    '            if(b2){',
+    '              var doc=new DOMParser().parseFromString(new TextDecoder().decode(b2),"text/html");',
+    '              doc.querySelectorAll("script,style").forEach(function(e){e.remove();});',
+    '              var t=((doc.body||doc.documentElement).textContent||"").replace(/[\\t ]+/g," ").replace(/(\\s*\\n){3,}/g,"\\n\\n").trim();',
+    '              if(t)parts.push(t);',
+    '            }',
+    '            return next();',
+    '          });',
+    '        }',
+    '        return next();',
+    '      });',
+    '    });',
+    '  });',
+    '}',
 
     // Live estimate
     'function updateEstimate() {',
@@ -417,6 +629,13 @@ function buildConfigHtml() {
     'function doRender() {',
     '  var text=document.getElementById("txt").value.trim();',
     '  if (!text){setStatus("Please enter some text first.","warn");return;}',
+    '  if (RETURN_TO.indexOf("pebblejs://") !== 0) {',
+    '    // CloudPebble: URL length limit prevents passing bitmap data back via redirect.',
+    '    // Send text + settings only; index.js renders locally using require("canvas").',
+    '    setStatus("Sending script to CloudPebble emulator...","ok");',
+    '    finish(null,0);',
+    '    return;',
+    '  }',
     '  var btn=document.getElementById("btnRender"), prog=document.getElementById("prog");',
     '  btn.disabled=true;',
     '  document.getElementById("progressWrap").style.display="block";',
@@ -460,8 +679,16 @@ function buildConfigHtml() {
     //   CloudPebble  → injected return URL   (via config-proxy.html)
     'var RETURN_TO="$$RETURN_TO$$";',
     'function finish(pagesOut,n) {',
-    '  setStatus("Done! "+n+(n>1?" pages":" page")+" rendered. Sending to watch...","ok");',
-    '  var result={pages:pagesOut,totalPages:n,watchWidth:WW,watchHeight:WH,textSize:SZ};',
+    '  var result;',
+    '  if (RETURN_TO.indexOf("pebblejs://") === 0) {',
+    '    // Real device: pass pre-rendered pages via URL (no server-side size limit).',
+    '    setStatus("Done! "+n+(n>1?" pages":" page")+" rendered. Connecting...","ok");',
+    '    result={pages:pagesOut,totalPages:n,watchWidth:WW,watchHeight:WH,textSize:SZ};',
+    '  } else {',
+    '    // CloudPebble: pass text + settings only; rendering done in index.js.',
+    '    setStatus("Script sent. Rendering on CloudPebble emulator...","ok");',
+    '    result={text:document.getElementById("txt").value.trim(),watchWidth:WW,watchHeight:WH,textSize:SZ,hpad:HPAD};',
+    '  }',
     '  try {',
     '    document.location=RETURN_TO+encodeURIComponent(JSON.stringify(result));',
     '  } catch(e) {',
