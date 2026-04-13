@@ -194,16 +194,30 @@ Pebble.addEventListener('webviewclosed', function(e) {
   }
   try {
     var result = JSON.parse(decodeURIComponent(e.response));
-    if (!result || !Array.isArray(result.pages) || result.pages.length === 0) {
-      console.log('[pkjs] Config returned empty page set');
-      return;
-    }
 
-    pages       = result.pages.map(base64ToArray);
-    totalPages  = result.totalPages  || pages.length;
     watchWidth  = result.watchWidth  || 144;
     watchHeight = result.watchHeight || 168;
-    textSize    = result.textSize    != null ? result.textSize : 1;
+    textSize    = result.textSize    != null ? result.textSize : 2;
+
+    if (result.text) {
+      // CloudPebble path: URL length limit prevents passing bitmaps via redirect.
+      // Render pages locally using the Node.js canvas module (available in pypkjs).
+      var hpad = result.hpad != null ? result.hpad : 2;
+      var rendered = renderAllPagesFromText(result.text, watchWidth, watchHeight, hpad, textSize);
+      if (!rendered || rendered.length === 0) {
+        console.log('[pkjs] Rendering failed – canvas may not be available in this environment');
+        return;
+      }
+      pages = rendered;
+      totalPages = pages.length;
+    } else if (Array.isArray(result.pages) && result.pages.length > 0) {
+      // Real device path: config page pre-rendered pages and passed them via URL.
+      pages      = result.pages.map(base64ToArray);
+      totalPages = result.totalPages || pages.length;
+    } else {
+      console.log('[pkjs] Config returned no usable data');
+      return;
+    }
 
     console.log('[pkjs] Loaded ' + totalPages + ' pages (' +
                 watchWidth + 'x' + watchHeight + ' textSize=' + textSize + ')');
@@ -213,8 +227,8 @@ Pebble.addEventListener('webviewclosed', function(e) {
         totalPages: totalPages, watchWidth: watchWidth,
         watchHeight: watchHeight, textSize: textSize
       }));
-      result.pages.forEach(function(b64, i) {
-        localStorage.setItem('pele_page_' + i, b64);
+      pages.forEach(function(bytes, i) {
+        localStorage.setItem('pele_page_' + i, arrayToBase64(bytes));
       });
     } catch (lsErr) {
       console.log('[pkjs] localStorage save failed: ' + lsErr);
@@ -226,10 +240,106 @@ Pebble.addEventListener('webviewclosed', function(e) {
 });
 
 function base64ToArray(b64) {
+  if (typeof Buffer !== 'undefined') {
+    var buf = Buffer.from(b64, 'base64');
+    var arr = new Array(buf.length);
+    for (var i = 0; i < buf.length; i++) arr[i] = buf[i];
+    return arr;
+  }
   var binary = atob(b64);
   var arr = new Array(binary.length);
   for (var i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
   return arr;
+}
+
+function arrayToBase64(arr) {
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(arr).toString('base64');
+  }
+  var s = '';
+  for (var i = 0; i < arr.length; i++) s += String.fromCharCode(arr[i]);
+  return btoa(s);
+}
+
+// ── On-device renderer (used in CloudPebble / pypkjs via require('canvas')) ──
+var RENDER_FONT_PX   = [9, 11, 14, 18, 22];
+var RENDER_FONT_WT   = [200, 300, 400, 400, 400];
+var RENDER_PADDING   = 50;
+var RENDER_MAX_PAGES = 60;
+
+function renderAllPagesFromText(text, w, h, hpad, szLevel) {
+  var Canvas;
+  try { Canvas = require('canvas'); } catch (e) {
+    console.log('[pkjs] canvas not available: ' + e);
+    return null;
+  }
+  var createFn = (typeof Canvas.createCanvas === 'function')
+    ? Canvas.createCanvas
+    : function(ww, hh) { return new Canvas(ww, hh); };
+
+  var fpx = RENDER_FONT_PX[szLevel] || 14;
+  var fwt = RENDER_FONT_WT[szLevel] || 400;
+  var lh  = Math.floor(fpx * 1.4);
+  var fontStr = fwt + ' ' + fpx + 'px sans-serif';
+
+  var mc   = createFn(w, h);
+  var mctx = mc.getContext('2d');
+  mctx.font = fontStr;
+  var lines  = renderWrapText(mctx, text, w - hpad * 2);
+  var totalH = RENDER_PADDING + lines.length * lh + RENDER_PADDING;
+  var numPages = Math.max(1, Math.min(RENDER_MAX_PAGES, Math.ceil(totalH / h)));
+  console.log('[pkjs] Rendering ' + numPages + ' page(s) ' + w + 'x' + h + ' sz=' + szLevel);
+
+  var out = [];
+  for (var pageN = 0; pageN < numPages; pageN++) {
+    var pc  = createFn(w, h);
+    var ctx = pc.getContext('2d');
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = fontStr;
+    var offsetY = RENDER_PADDING - pageN * h;
+    for (var li = 0; li < lines.length; li++) {
+      var y = offsetY + li * lh + fpx;
+      if (y > h + lh) break;
+      if (y + lh < 0) continue;
+      ctx.fillText(lines[li], hpad, y);
+    }
+    out.push(renderEncode1Bit(ctx.getImageData(0, 0, w, h), w, h));
+  }
+  console.log('[pkjs] Done: ' + out.length + ' page(s)');
+  return out;
+}
+
+function renderWrapText(ctx, text, maxW) {
+  var lines = [], paras = text.split('\n');
+  for (var p = 0; p < paras.length; p++) {
+    var para = paras[p];
+    if (!para.trim()) { lines.push(''); continue; }
+    var words = para.split(' '), line = '';
+    for (var i = 0; i < words.length; i++) {
+      var test = line ? line + ' ' + words[i] : words[i];
+      if (ctx.measureText(test).width <= maxW) { line = test; }
+      else { if (line) lines.push(line); line = words[i]; }
+    }
+    if (line) lines.push(line);
+  }
+  return lines;
+}
+
+function renderEncode1Bit(imageData, w, h) {
+  var stride = Math.ceil(w / 8);
+  var result = new Array(stride * h);
+  for (var k = 0; k < result.length; k++) result[k] = 0;
+  var d = imageData.data;
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      var idx  = (y * w + x) * 4;
+      var luma = 0.299 * d[idx] + 0.587 * d[idx + 1] + 0.114 * d[idx + 2];
+      if (luma > 64) result[y * stride + (x >> 3)] |= (0x80 >> (x & 7));
+    }
+  }
+  return result;
 }
 
 // ── 從 localStorage 恢復上次的頁面資料 ──────────────────────────
@@ -309,10 +419,10 @@ function buildConfigHtml() {
     // ── Platform selector ────────────────────────────────────────
     '<label class="label">Platform</label>',
     '<div class="btn-row" id="platRow">',
-    '  <button class="seg-btn active" data-w="144" data-h="168" data-hpad="2"  onclick="setPlatform(this)">Aplite / Basalt<br>144&#xD7;168</button>',
-    '  <button class="seg-btn"        data-w="180" data-h="180" data-hpad="20" onclick="setPlatform(this)">Chalk<br>180&#xD7;180</button>',
-    '  <button class="seg-btn"        data-w="200" data-h="228" data-hpad="2"  onclick="setPlatform(this)">Emery<br>200&#xD7;228</button>',
-    '  <button class="seg-btn"        data-w="260" data-h="260" data-hpad="30" onclick="setPlatform(this)">Gabbro<br>260&#xD7;260</button>',
+    '  <button class="seg-btn active" data-w="144" data-h="168" data-hpad="2"  onclick="setPlatform(this)">Aplite/Basalt<br><span style="color:#888;font-size:10px">Pebble&#xB7;Time</span><br>144&#xD7;168</button>',
+    '  <button class="seg-btn"        data-w="180" data-h="180" data-hpad="20" onclick="setPlatform(this)">Chalk<br><span style="color:#888;font-size:10px">Time Round</span><br>180&#xD7;180</button>',
+    '  <button class="seg-btn"        data-w="200" data-h="228" data-hpad="2"  onclick="setPlatform(this)">Emery<br><span style="color:#888;font-size:10px">Time 2</span><br>200&#xD7;228</button>',
+    '  <button class="seg-btn"        data-w="260" data-h="260" data-hpad="30" onclick="setPlatform(this)">Gabbro<br><span style="color:#888;font-size:10px">Round 2</span><br>260&#xD7;260</button>',
     '</div>',
 
     // ── Text size selector ───────────────────────────────────────
@@ -417,6 +527,13 @@ function buildConfigHtml() {
     'function doRender() {',
     '  var text=document.getElementById("txt").value.trim();',
     '  if (!text){setStatus("Please enter some text first.","warn");return;}',
+    '  if (RETURN_TO.indexOf("pebblejs://") !== 0) {',
+    '    // CloudPebble: URL length limit prevents passing bitmap data back via redirect.',
+    '    // Send text + settings only; index.js renders locally using require("canvas").',
+    '    setStatus("Sending script to CloudPebble emulator...","ok");',
+    '    finish(null,0);',
+    '    return;',
+    '  }',
     '  var btn=document.getElementById("btnRender"), prog=document.getElementById("prog");',
     '  btn.disabled=true;',
     '  document.getElementById("progressWrap").style.display="block";',
@@ -460,8 +577,16 @@ function buildConfigHtml() {
     //   CloudPebble  → injected return URL   (via config-proxy.html)
     'var RETURN_TO="$$RETURN_TO$$";',
     'function finish(pagesOut,n) {',
-    '  setStatus("Done! "+n+(n>1?" pages":" page")+" rendered. Sending to watch...","ok");',
-    '  var result={pages:pagesOut,totalPages:n,watchWidth:WW,watchHeight:WH,textSize:SZ};',
+    '  var result;',
+    '  if (RETURN_TO.indexOf("pebblejs://") === 0) {',
+    '    // Real device: pass pre-rendered pages via URL (no server-side size limit).',
+    '    setStatus("Done! "+n+(n>1?" pages":" page")+" rendered. Connecting...","ok");',
+    '    result={pages:pagesOut,totalPages:n,watchWidth:WW,watchHeight:WH,textSize:SZ};',
+    '  } else {',
+    '    // CloudPebble: pass text + settings only; rendering done in index.js.',
+    '    setStatus("Script sent. Rendering on CloudPebble emulator...","ok");',
+    '    result={text:document.getElementById("txt").value.trim(),watchWidth:WW,watchHeight:WH,textSize:SZ,hpad:HPAD};',
+    '  }',
     '  try {',
     '    document.location=RETURN_TO+encodeURIComponent(JSON.stringify(result));',
     '  } catch(e) {',
