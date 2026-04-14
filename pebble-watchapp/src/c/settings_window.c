@@ -232,7 +232,7 @@ static void pct_down_handler(ClickRecognizerRef recognizer, void *context) {
 }
 
 static void pct_select_handler(ClickRecognizerRef recognizer, void *context) {
-    if (s_jump_pct_cb) {
+    if (s_jump_pct_cb && s_total_pages > 0) {
         s_jump_pct_cb(s_jump_target_pct);
     }
     if (s_pct_window)      window_stack_remove(s_pct_window, true);
@@ -419,6 +419,7 @@ static void menu_select_click(MenuLayer *menu_layer, MenuIndex *cell_index,
             break;
         }
         case SECTION_JUMP: {
+            if (s_total_pages == 0) return;  // 文檔未載入，忽略
             if (cell_index->row == JUMP_ROW_PAGE) {
                 open_jump_window();
             } else {

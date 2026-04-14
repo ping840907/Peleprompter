@@ -73,6 +73,22 @@ static bool    s_waiting_for_page = false;
 // 初始化完成旗標
 static bool    s_images_initialized = false;
 
+// Toast 覆蓋訊息
+static TextLayer *s_toast_layer   = NULL;
+static AppTimer  *s_toast_timer   = NULL;
+static char       s_toast_buf[48] = "";
+
+// 退出確認（雙按 Back）
+static bool      s_exit_confirm_pending = false;
+static AppTimer *s_exit_confirm_timer   = NULL;
+
+// 頁面請求逾時與重試
+#define PAGE_REQUEST_TIMEOUT_MS  8000
+#define PAGE_REQUEST_MAX_RETRIES 3
+static AppTimer *s_page_timeout_timer = NULL;
+static int32_t   s_pending_page_num   = -1;
+static int32_t   s_page_retry_count   = 0;
+
 // ============================================================
 // 輔助：計算最大捲動偏移
 // ============================================================
@@ -84,6 +100,75 @@ static int32_t get_max_scroll(void) {
     int32_t total_virtual_h = s_img_mgr.total_pages * s_img_mgr.page_height;
     int32_t max = total_virtual_h - screen_h;
     return max > 0 ? max : 0;
+}
+
+// ============================================================
+// Toast 覆蓋訊息
+// ============================================================
+static void hide_toast_cb(void *data) {
+    s_toast_timer = NULL;
+    if (s_toast_layer) {
+        layer_set_hidden(text_layer_get_layer(s_toast_layer), true);
+    }
+}
+
+static void show_toast(const char *msg, uint32_t duration_ms) {
+    if (!s_toast_layer) return;
+    strncpy(s_toast_buf, msg, sizeof(s_toast_buf) - 1);
+    s_toast_buf[sizeof(s_toast_buf) - 1] = '\0';
+    text_layer_set_text(s_toast_layer, s_toast_buf);
+    layer_set_hidden(text_layer_get_layer(s_toast_layer), false);
+    if (s_toast_timer) app_timer_cancel(s_toast_timer);
+    s_toast_timer = app_timer_register(duration_ms, hide_toast_cb, NULL);
+}
+
+// ============================================================
+// 頁面請求逾時與重試
+// ============================================================
+static void start_page_timeout(int32_t page_num);  // forward decl
+
+static void page_timeout_tick(void *data) {
+    s_page_timeout_timer = NULL;
+    if (!s_waiting_for_page || s_pending_page_num < 0) return;
+
+    if (s_page_retry_count < PAGE_REQUEST_MAX_RETRIES) {
+        s_page_retry_count++;
+        APP_LOG(APP_LOG_LEVEL_WARNING,
+                "頁面 %ld 逾時，第 %ld 次重試",
+                (long)s_pending_page_num, (long)s_page_retry_count);
+        messaging_request_page(s_pending_page_num);
+        s_page_timeout_timer = app_timer_register(
+            PAGE_REQUEST_TIMEOUT_MS, page_timeout_tick, NULL);
+    } else {
+        APP_LOG(APP_LOG_LEVEL_ERROR,
+                "頁面 %ld 重試上限，停止等待", (long)s_pending_page_num);
+        s_waiting_for_page = false;
+        s_pending_page_num = -1;
+        s_page_retry_count = 0;
+        if (!s_bt_connected) s_show_disconnect_warning = true;
+        if (s_status_layer) {
+            text_layer_set_text(s_status_layer, "Loading...");
+            layer_set_hidden(text_layer_get_layer(s_status_layer), false);
+        }
+        if (s_canvas_layer) layer_mark_dirty(s_canvas_layer);
+    }
+}
+
+static void start_page_timeout(int32_t page_num) {
+    s_pending_page_num = page_num;
+    s_page_retry_count = 0;
+    if (s_page_timeout_timer) app_timer_cancel(s_page_timeout_timer);
+    s_page_timeout_timer = app_timer_register(
+        PAGE_REQUEST_TIMEOUT_MS, page_timeout_tick, NULL);
+}
+
+static void cancel_page_timeout(void) {
+    if (s_page_timeout_timer) {
+        app_timer_cancel(s_page_timeout_timer);
+        s_page_timeout_timer = NULL;
+    }
+    s_pending_page_num = -1;
+    s_page_retry_count = 0;
 }
 
 // ============================================================
@@ -113,6 +198,7 @@ static void check_prefetch(void) {
                 image_manager_alloc_slot(&s_img_mgr, pg);
                 messaging_request_page(pg);
                 s_waiting_for_page = true;
+                start_page_timeout(pg);
                 return;
             }
         }
@@ -504,17 +590,45 @@ static void do_manual_scroll(int32_t delta_px) {
 
 static void up_short_click(ClickRecognizerRef recognizer, void *context) {
     do_manual_scroll(-MANUAL_SCROLL_SHORT_PX);
+    // 長按時每 3 次重複給一次輕柔震動（~300ms 間隔，從第 4 次重複開始）
+    uint16_t n = click_number_of_clicks_counted(recognizer);
+    if (n >= 4 && (n % 3) == 1) vibes_short_pulse();
 }
 
 static void down_short_click(ClickRecognizerRef recognizer, void *context) {
     do_manual_scroll(MANUAL_SCROLL_SHORT_PX);
+    uint16_t n = click_number_of_clicks_counted(recognizer);
+    if (n >= 4 && (n % 3) == 1) vibes_short_pulse();
 }
 
 static void select_short_click(ClickRecognizerRef recognizer, void *context) {
     if (s_auto_scroll_active && !s_manual_pause_active) {
         stop_auto_scroll();
+        show_toast("Auto: OFF", 1400);
     } else {
         start_auto_scroll();
+        show_toast("Auto: ON", 1400);
+    }
+}
+
+static void exit_confirm_expired(void *data) {
+    s_exit_confirm_timer   = NULL;
+    s_exit_confirm_pending = false;
+}
+
+static void back_click_handler(ClickRecognizerRef recognizer, void *context) {
+    if (s_exit_confirm_pending) {
+        s_exit_confirm_pending = false;
+        if (s_exit_confirm_timer) {
+            app_timer_cancel(s_exit_confirm_timer);
+            s_exit_confirm_timer = NULL;
+        }
+        window_stack_pop(true);   // 彈出主視窗 → app 結束
+    } else {
+        s_exit_confirm_pending = true;
+        show_toast("Press back again\nto exit", 2000);
+        if (s_exit_confirm_timer) app_timer_cancel(s_exit_confirm_timer);
+        s_exit_confirm_timer = app_timer_register(2000, exit_confirm_expired, NULL);
     }
 }
 
@@ -545,6 +659,7 @@ static void click_config_provider(void *context) {
     window_single_repeating_click_subscribe(BUTTON_ID_DOWN, 100, down_short_click);
     window_single_click_subscribe(BUTTON_ID_SELECT, select_short_click);
     window_long_click_subscribe(BUTTON_ID_SELECT, 500, select_long_click, NULL);
+    window_single_click_subscribe(BUTTON_ID_BACK, back_click_handler);
 }
 
 // ============================================================
@@ -569,6 +684,7 @@ static void on_images_initialized(int32_t total_pages,
     image_manager_alloc_slot(&s_img_mgr, 0);
     messaging_request_page(0);
     s_waiting_for_page = true;
+    start_page_timeout(0);
 
     APP_LOG(APP_LOG_LEVEL_INFO,
             "圖片模式初始化：%ld 頁, %ldx%ld",
@@ -587,6 +703,7 @@ static void on_image_chunk_received(int32_t page_num,
 
     if (page_complete) {
         s_waiting_for_page = false;
+        cancel_page_timeout();
 
         // 隱藏斷線警告 / Loading 狀態
         s_show_disconnect_warning = false;
@@ -810,6 +927,24 @@ static void main_window_load(Window *window) {
     layer_set_hidden(text_layer_get_layer(s_status_layer), false);
     layer_add_child(window_layer, text_layer_get_layer(s_status_layer));
 
+    // Toast 覆蓋層（疊在所有層上方，預設隱藏）
+    s_toast_layer = text_layer_create(
+        GRect(0, bounds.size.h / 2 - 23, bounds.size.w, 46)
+    );
+#ifdef PBL_COLOR
+    text_layer_set_background_color(s_toast_layer, GColorDarkGray);
+    text_layer_set_text_color(s_toast_layer, GColorWhite);
+#else
+    text_layer_set_background_color(s_toast_layer, GColorWhite);
+    text_layer_set_text_color(s_toast_layer, GColorBlack);
+#endif
+    text_layer_set_text_alignment(s_toast_layer, GTextAlignmentCenter);
+    text_layer_set_font(s_toast_layer,
+                        fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+    text_layer_set_overflow_mode(s_toast_layer, GTextOverflowModeWordWrap);
+    layer_set_hidden(text_layer_get_layer(s_toast_layer), true);
+    layer_add_child(window_layer, text_layer_get_layer(s_toast_layer));
+
     // 套用頂部時間欄設定（建立 StatusBarLayer 並調整 canvas 框架）
     apply_status_bar();
 
@@ -824,6 +959,24 @@ static void main_window_unload(Window *window) {
         status_bar_layer_destroy(s_pebble_status_bar);
         s_pebble_status_bar = NULL;
     }
+
+    // 清理 Toast 層
+    if (s_toast_timer) {
+        app_timer_cancel(s_toast_timer);
+        s_toast_timer = NULL;
+    }
+    if (s_toast_layer) {
+        text_layer_destroy(s_toast_layer);
+        s_toast_layer = NULL;
+    }
+
+    // 清理退出確認計時器
+    if (s_exit_confirm_timer) {
+        app_timer_cancel(s_exit_confirm_timer);
+        s_exit_confirm_timer = NULL;
+    }
+    s_exit_confirm_pending = false;
+
     layer_destroy(s_canvas_layer);
     text_layer_destroy(s_status_layer);
     s_canvas_layer = NULL;
@@ -885,6 +1038,7 @@ static void deinit(void) {
         app_timer_cancel(s_manual_anim_timer);
         s_manual_anim_timer = NULL;
     }
+    cancel_page_timeout();
 
     image_manager_deinit(&s_img_mgr);
     messaging_deinit();
