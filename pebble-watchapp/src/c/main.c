@@ -229,19 +229,39 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
                 }
             }
 
-            // 頁碼文字：弧形進度條正上方，底部中央
+            // 弧形進度條正上方：兩行文字（百分比 + 頁碼）
             {
+                GFont tiny_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
+                const int32_t TH = 14;  // 行高
+                // 弧內緣底部約在 screen_h - ARC_THICK
+                int32_t y_page = screen_h - (int32_t)ARC_THICK - TH;      // 下行（頁碼）
+                int32_t y_pct  = y_page - TH - 1;                         // 上行（百分比）
+
+                int32_t pct = (max_offset > 0)
+                    ? (int32_t)((int64_t)s_scroll_offset_px * 100 / max_offset)
+                    : 0;
+
+                // 百分比行
+                char pct_buf[8];
+                snprintf(pct_buf, sizeof(pct_buf), "%d%%", (int)pct);
+                GRect pct_bg = GRect(screen_w / 2 - 28, y_pct, 56, TH);
+                graphics_context_set_fill_color(ctx, GColorBlack);
+                graphics_fill_rect(ctx, pct_bg, 0, GCornerNone);
+                graphics_context_set_text_color(ctx, GColorWhite);
+                graphics_draw_text(ctx, pct_buf, tiny_font,
+                                   GRect(screen_w / 2 - 27, y_pct, 54, TH),
+                                   GTextOverflowModeTrailingEllipsis,
+                                   GTextAlignmentCenter, NULL);
+
+                // 頁碼行
                 char page_buf[16];
                 snprintf(page_buf, sizeof(page_buf), "%d/%d", (int)cur_page, (int)total);
-                GFont tiny_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
-                // 文字 y = 弧內緣正上方 (螢幕高度 - 弧厚度 - 文字高度 - 小間距)
-                int32_t text_y = screen_h - ARC_THICK - 15;
-                GRect text_bg = GRect(screen_w / 2 - 28, text_y, 56, 14);
+                GRect page_bg = GRect(screen_w / 2 - 28, y_page, 56, TH);
                 graphics_context_set_fill_color(ctx, GColorBlack);
-                graphics_fill_rect(ctx, text_bg, 0, GCornerNone);
+                graphics_fill_rect(ctx, page_bg, 0, GCornerNone);
                 graphics_context_set_text_color(ctx, GColorWhite);
                 graphics_draw_text(ctx, page_buf, tiny_font,
-                                   GRect(screen_w / 2 - 27, text_y, 54, 14),
+                                   GRect(screen_w / 2 - 27, y_page, 54, TH),
                                    GTextOverflowModeTrailingEllipsis,
                                    GTextAlignmentCenter, NULL);
             }
@@ -266,13 +286,32 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
                 graphics_fill_rect(ctx, GRect(0, bar_y, fill_w, BAR_H), 0, GCornerNone);
             }
 
-            // 頁碼文字：右下角，進度條正上方
+            // 進度條正上方：中央百分比 + 右側頁碼，同一行
             {
-                char page_buf[16];
-                snprintf(page_buf, sizeof(page_buf), "%d/%d", (int)cur_page, (int)total);
                 GFont tiny_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
                 int32_t text_y  = bar_y - TEXT_H;
-                // 黑色背景確保文字在任何內容上都清晰可見
+
+                int32_t pct = (max_offset > 0)
+                    ? (int32_t)((int64_t)s_scroll_offset_px * 100 / max_offset)
+                    : 0;
+
+                // 百分比（水平置中，40px 寬）
+                char pct_buf[8];
+                snprintf(pct_buf, sizeof(pct_buf), "%d%%", (int)pct);
+                const int32_t PCT_W = 40;
+                int32_t pct_x = (screen_w - PCT_W) / 2;
+                graphics_context_set_fill_color(ctx, GColorBlack);
+                graphics_fill_rect(ctx, GRect(pct_x, text_y, PCT_W, TEXT_H),
+                                   0, GCornerNone);
+                graphics_context_set_text_color(ctx, GColorWhite);
+                graphics_draw_text(ctx, pct_buf, tiny_font,
+                                   GRect(pct_x, text_y, PCT_W, TEXT_H),
+                                   GTextOverflowModeTrailingEllipsis,
+                                   GTextAlignmentCenter, NULL);
+
+                // 頁碼（右下角，TEXT_W 寬）
+                char page_buf[16];
+                snprintf(page_buf, sizeof(page_buf), "%d/%d", (int)cur_page, (int)total);
                 graphics_context_set_fill_color(ctx, GColorBlack);
                 graphics_fill_rect(ctx, GRect(screen_w - TEXT_W, text_y, TEXT_W, TEXT_H),
                                    0, GCornerNone);
@@ -481,18 +520,24 @@ static void select_short_click(ClickRecognizerRef recognizer, void *context) {
 
 static void on_settings_changed(int32_t speed, TextSizeLevel size, bool show_status_bar);
 static void on_jump_to_page(int32_t page_num);
+static void on_jump_to_percent(int32_t percent);
 static void apply_status_bar(void);
 
 static void select_long_click(ClickRecognizerRef recognizer, void *context) {
-    int32_t cur_page   = 0;
-    int32_t total_pgs  = 0;
+    int32_t cur_page  = 0;
+    int32_t total_pgs = 0;
+    int32_t cur_pct   = 0;
     if (s_images_initialized && s_img_mgr.page_height > 0) {
         cur_page  = s_scroll_offset_px / s_img_mgr.page_height + 1;
         total_pgs = s_img_mgr.total_pages;
+        int32_t max = get_max_scroll();
+        if (max > 0) {
+            cur_pct = (int32_t)((int64_t)s_scroll_offset_px * 100 / max);
+        }
     }
     settings_window_push(s_scroll_speed, s_text_size, s_show_status_bar,
-                         cur_page, total_pgs,
-                         on_settings_changed, on_jump_to_page);
+                         cur_page, total_pgs, cur_pct,
+                         on_settings_changed, on_jump_to_page, on_jump_to_percent);
 }
 
 static void click_config_provider(void *context) {
@@ -629,7 +674,31 @@ static void on_settings_changed(int32_t speed, TextSizeLevel size, bool show_sta
     }
 }
 
-/** 跳頁回呼（從跳頁視窗確認後呼叫，page_num 為 0-indexed）*/
+/** 按百分比跳轉回呼（percent 為 0-100）*/
+static void on_jump_to_percent(int32_t percent) {
+    if (!s_images_initialized || s_img_mgr.total_pages == 0) return;
+
+    int32_t max = get_max_scroll();
+    if (max <= 0) return;
+
+    if (percent < 0)   percent = 0;
+    if (percent > 100) percent = 100;
+
+    int32_t target = (int32_t)((int64_t)percent * max / 100);
+
+    s_scroll_offset_px = target;
+    s_target_scroll_px = -1;
+
+    if (s_manual_anim_timer) {
+        app_timer_cancel(s_manual_anim_timer);
+        s_manual_anim_timer = NULL;
+    }
+
+    layer_mark_dirty(s_canvas_layer);
+    check_prefetch();
+}
+
+/** 按頁碼跳轉回呼（page_num 為 0-indexed）*/
 static void on_jump_to_page(int32_t page_num) {
     if (!s_images_initialized || s_img_mgr.total_pages == 0) return;
 
