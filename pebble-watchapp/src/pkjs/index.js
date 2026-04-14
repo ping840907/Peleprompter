@@ -191,6 +191,20 @@ function sendPageInChunks(pageNum, data) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// 主動推送：頁面就緒後通知手錶，無須手錶重新發 CMD_REQUEST_TEXT
+// ══════════════════════════════════════════════════════════════════
+function notifyWatchReady() {
+  if (totalPages === 0) return;
+  var reply = {};
+  reply[KEY_COMMAND]      = CMD_INIT_IMAGES;
+  reply[KEY_TOTAL_PAGES]  = totalPages;
+  reply[KEY_WATCH_WIDTH]  = watchWidth;
+  reply[KEY_WATCH_HEIGHT] = watchHeight;
+  enqueue(reply);
+  console.log('[pkjs] Proactively sent CMD_INIT_IMAGES: ' + totalPages + ' pages');
+}
+
+// ══════════════════════════════════════════════════════════════════
 // 輔助：根據螢幕尺寸推算預設水平內距
 // ══════════════════════════════════════════════════════════════════
 function hpadForDimensions(w, h) {
@@ -279,6 +293,10 @@ Pebble.addEventListener('webviewclosed', function(e) {
                 watchWidth + 'x' + watchHeight + ' textSize=' + textSize + ')');
 
     saveToStorage();
+
+    // 主動通知手錶頁面已就緒，不等手錶重新發 CMD_REQUEST_TEXT
+    // （手錶 app 可能已在前景等待，直接推送讓它立刻開始拉頁面）
+    notifyWatchReady();
 
   } catch (ex) {
     console.log('[pkjs] Failed to parse config response: ' + ex.message);
