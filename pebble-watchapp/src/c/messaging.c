@@ -20,9 +20,14 @@ static ConnectionChangeCallback s_conn_callback   = NULL;
 static bool s_is_connected = false;
 static bool s_is_sending   = false;   // Outbox 使用鎖，防止重複發送
 
-// 重試佇列：記錄最後一次失敗的請求頁碼
-static bool    s_retry_pending  = false;
-static int32_t s_retry_page_num = 0;
+// 重試佇列
+static bool    s_retry_pending   = false;
+static bool    s_retry_is_init   = false;   // true = 重試 init，false = 重試 page
+static int32_t s_retry_page_num  = 0;
+// init 重試所需的完整參數（避免以 -1 當哨兵值傳給 request_page）
+static int32_t s_retry_init_w    = 0;
+static int32_t s_retry_init_h    = 0;
+static int32_t s_retry_init_size = 0;
 
 // ============================================================
 // 內部：處理收到的訊息
@@ -97,25 +102,27 @@ static void inbox_dropped_handler(AppMessageResult reason, void *context) {
 // ============================================================
 // 內部：處理發送結果
 // ============================================================
-static void outbox_sent_handler(DictionaryIterator *iterator, void *context) {
-    s_is_sending = false;
-
-    if (s_retry_pending) {
-        s_retry_pending = false;
+static void dispatch_retry(void) {
+    if (!s_retry_pending) return;
+    s_retry_pending = false;
+    if (s_retry_is_init) {
+        s_retry_is_init = false;
+        messaging_request_init(s_retry_init_w, s_retry_init_h, s_retry_init_size);
+    } else {
         messaging_request_page(s_retry_page_num);
     }
+}
+
+static void outbox_sent_handler(DictionaryIterator *iterator, void *context) {
+    s_is_sending = false;
+    dispatch_retry();
 }
 
 static void outbox_failed_handler(DictionaryIterator *iterator,
                                   AppMessageResult reason, void *context) {
     APP_LOG(APP_LOG_LEVEL_ERROR, "發送失敗: %d", (int)reason);
     s_is_sending = false;
-
-    if (s_retry_pending) {
-        int32_t page_to_retry = s_retry_page_num;
-        s_retry_pending = false;
-        messaging_request_page(page_to_retry);
-    }
+    dispatch_retry();
 }
 
 // ============================================================
@@ -168,9 +175,12 @@ void messaging_request_init(int32_t watch_width,
                              int32_t watch_height,
                              int32_t text_size) {
     if (s_is_sending) {
-        // Outbox 忙碌，排入重試（以 page 0 作為哨兵，實際由 init 觸發）
-        s_retry_pending  = true;
-        s_retry_page_num = -1;  // 特殊值：代表重試 init
+        // Outbox 忙碌，記錄完整 init 參數等待重試
+        s_retry_pending   = true;
+        s_retry_is_init   = true;
+        s_retry_init_w    = watch_width;
+        s_retry_init_h    = watch_height;
+        s_retry_init_size = text_size;
         return;
     }
     if (!s_is_connected) {
