@@ -47,11 +47,14 @@ var IMAGE_CHUNK_DATA_SIZE = 1800;
 // ══════════════════════════════════════════════════════════════════
 // 狀態
 // ══════════════════════════════════════════════════════════════════
-var pages       = [];   // number[][]：每頁的 0-255 位元組陣列
-var totalPages  = 0;
-var watchWidth  = 144;
-var watchHeight = 168;
-var textSize    = 1;    // TEXT_SIZE_MEDIUM
+var pages            = [];   // number[][]：每頁的 0-255 位元組陣列
+var totalPages       = 0;
+var watchWidth       = 144;
+var watchHeight      = 168;
+var textSize         = 2;    // TEXT_SIZE_MEDIUM（目前設定值）
+var renderedTextSize = 2;    // 實際渲染頁面時使用的文字大小
+var rawText          = '';   // 原始未渲染文字（供重繪使用）
+var rawHpad          = 2;    // 水平內距（與平台有關）
 
 // ACK 驅動發送佇列
 var messageQueue = [];
@@ -103,7 +106,7 @@ Pebble.addEventListener('appmessage', function(e) {
 function handleInitRequest(dict) {
   var reqW    = parseInt(dict[KEY_WATCH_WIDTH])  || 144;
   var reqH    = parseInt(dict[KEY_WATCH_HEIGHT]) || 168;
-  var reqSize = (dict[KEY_TEXT_SIZE] != null) ? parseInt(dict[KEY_TEXT_SIZE]) : textSize;
+  var reqSize = (dict[KEY_TEXT_SIZE] != null) ? parseInt(dict[KEY_TEXT_SIZE]) : renderedTextSize;
 
   console.log('[pkjs] Init request: ' + reqW + 'x' + reqH + ' textSize=' + reqSize +
               ' pages=' + pages.length);
@@ -112,8 +115,23 @@ function handleInitRequest(dict) {
     console.log('[pkjs] No pages — open settings to paste text.');
     return;
   }
-  if (reqSize !== textSize) {
-    console.log('[pkjs] Text size mismatch (req=' + reqSize + ' rendered=' + textSize + ').');
+
+  // 文字大小與實際渲染不符時自動重繪（需要有原始文字且環境支援 canvas）
+  if (reqSize !== renderedTextSize && rawText) {
+    console.log('[pkjs] Text size changed (' + renderedTextSize + '→' + reqSize + '), re-rendering...');
+    var rerendered = renderAllPagesFromText(rawText, reqW, reqH, rawHpad, reqSize);
+    if (rerendered && rerendered.length > 0) {
+      pages            = rerendered;
+      totalPages       = pages.length;
+      watchWidth       = reqW;
+      watchHeight      = reqH;
+      textSize         = reqSize;
+      renderedTextSize = reqSize;
+      saveToStorage();
+      console.log('[pkjs] Re-rendered ' + totalPages + ' pages at textSize=' + reqSize);
+    } else {
+      console.log('[pkjs] Re-render failed (canvas not available?). Open settings to re-render manually.');
+    }
   }
 
   var reply = {};
@@ -146,7 +164,8 @@ function handleSettingsSync(dict) {
     var newSize = parseInt(dict[KEY_TEXT_SIZE]);
     if (newSize !== textSize) {
       textSize = newSize;
-      console.log('[pkjs] Text size changed to ' + newSize + '. Re-open settings to re-render.');
+      // 實際重繪在 handleInitRequest 執行（手錶在發送 SYNC_SETTINGS 後會發送 REQUEST_TEXT）
+      console.log('[pkjs] Text size setting updated to ' + newSize + '. Awaiting init request to re-render.');
     }
   }
 }
@@ -169,6 +188,36 @@ function sendPageInChunks(pageNum, data) {
   }
   console.log('[pkjs] Queued ' + totalChunks + ' chunks for page ' + pageNum +
               ' (' + data.length + 'B)');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 輔助：根據螢幕尺寸推算預設水平內距
+// ══════════════════════════════════════════════════════════════════
+function hpadForDimensions(w, h) {
+  if (w === 180 && h === 180) return 20;   // Chalk (Time Round)
+  if (w === 260 && h === 260) return 30;   // Gabbro (Time Round 2)
+  return 2;                                // Aplite/Basalt/Emery
+}
+
+// ══════════════════════════════════════════════════════════════════
+// localStorage 持久化（集中管理，含原始文字）
+// ══════════════════════════════════════════════════════════════════
+function saveToStorage() {
+  try {
+    localStorage.setItem('pele_meta', JSON.stringify({
+      totalPages: totalPages, watchWidth: watchWidth,
+      watchHeight: watchHeight, textSize: renderedTextSize
+    }));
+    pages.forEach(function(bytes, i) {
+      localStorage.setItem('pele_page_' + i, arrayToBase64(bytes));
+    });
+    if (rawText) {
+      localStorage.setItem('pele_text', rawText);
+      localStorage.setItem('pele_hpad', String(rawHpad));
+    }
+  } catch (e) {
+    console.log('[pkjs] localStorage save failed: ' + e);
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -199,11 +248,16 @@ Pebble.addEventListener('webviewclosed', function(e) {
     watchHeight = result.watchHeight || 168;
     textSize    = result.textSize    != null ? result.textSize : 2;
 
+    // 儲存原始文字供後續重繪使用（實機與 CloudPebble 路徑均嘗試保存）
     if (result.text) {
+      rawText = result.text;
+      rawHpad = result.hpad != null ? result.hpad : hpadForDimensions(watchWidth, watchHeight);
+    }
+
+    if (result.text && !(Array.isArray(result.pages) && result.pages.length > 0)) {
       // CloudPebble path: URL length limit prevents passing bitmaps via redirect.
       // Render pages locally using the Node.js canvas module (available in pypkjs).
-      var hpad = result.hpad != null ? result.hpad : 2;
-      var rendered = renderAllPagesFromText(result.text, watchWidth, watchHeight, hpad, textSize);
+      var rendered = renderAllPagesFromText(rawText, watchWidth, watchHeight, rawHpad, textSize);
       if (!rendered || rendered.length === 0) {
         console.log('[pkjs] Rendering failed – canvas may not be available in this environment');
         return;
@@ -219,20 +273,12 @@ Pebble.addEventListener('webviewclosed', function(e) {
       return;
     }
 
+    renderedTextSize = textSize;
+
     console.log('[pkjs] Loaded ' + totalPages + ' pages (' +
                 watchWidth + 'x' + watchHeight + ' textSize=' + textSize + ')');
 
-    try {
-      localStorage.setItem('pele_meta', JSON.stringify({
-        totalPages: totalPages, watchWidth: watchWidth,
-        watchHeight: watchHeight, textSize: textSize
-      }));
-      pages.forEach(function(bytes, i) {
-        localStorage.setItem('pele_page_' + i, arrayToBase64(bytes));
-      });
-    } catch (lsErr) {
-      console.log('[pkjs] localStorage save failed: ' + lsErr);
-    }
+    saveToStorage();
 
   } catch (ex) {
     console.log('[pkjs] Failed to parse config response: ' + ex.message);
@@ -358,12 +404,16 @@ function renderEncode1Bit(imageData, w, h) {
       restored.push(base64ToArray(b64));
     }
     if (restored.length === n) {
-      pages       = restored;
-      totalPages  = meta.totalPages;
-      watchWidth  = meta.watchWidth  || 144;
-      watchHeight = meta.watchHeight || 168;
-      textSize    = meta.textSize    != null ? meta.textSize : 1;
-      console.log('[pkjs] Restored ' + totalPages + ' pages from localStorage');
+      pages            = restored;
+      totalPages       = meta.totalPages;
+      watchWidth       = meta.watchWidth  || 144;
+      watchHeight      = meta.watchHeight || 168;
+      textSize         = meta.textSize    != null ? meta.textSize : 2;
+      renderedTextSize = textSize;
+      rawText          = localStorage.getItem('pele_text') || '';
+      rawHpad          = parseInt(localStorage.getItem('pele_hpad') || '2');
+      console.log('[pkjs] Restored ' + totalPages + ' pages from localStorage' +
+                  (rawText ? ' (raw text available for re-render)' : ''));
     }
   } catch (e) {
     console.log('[pkjs] localStorage restore failed: ' + e);
@@ -455,9 +505,10 @@ function buildConfigHtml() {
     '<script>',
     '"use strict";',
 
-    // State
-    'var WW=144, WH=168, SZ=2, HPAD=2;',
+    // State — injected from pkjs at build time
+    'var WW=' + watchWidth + ', WH=' + watchHeight + ', SZ=' + renderedTextSize + ', HPAD=' + rawHpad + ';',
     'var PADDING=50, FONT_PX=[9,11,14,18,22], FONT_WT=[200,300,400,400,400], MAX_PAGES=60;',
+    'var STORED_TEXT=' + JSON.stringify(rawText) + ';',
 
     // UI helpers
     'function setPlatform(btn) {',
@@ -679,15 +730,17 @@ function buildConfigHtml() {
     //   CloudPebble  → injected return URL   (via config-proxy.html)
     'var RETURN_TO="$$RETURN_TO$$";',
     'function finish(pagesOut,n) {',
+    '  var text=document.getElementById("txt").value.trim();',
     '  var result;',
     '  if (RETURN_TO.indexOf("pebblejs://") === 0) {',
-    '    // Real device: pass pre-rendered pages via URL (no server-side size limit).',
+    '    // Real device: pass pre-rendered pages + original text via URL.',
+    '    // Including text allows pkjs to re-render when font size changes without re-opening settings.',
     '    setStatus("Done! "+n+(n>1?" pages":" page")+" rendered. Connecting...","ok");',
-    '    result={pages:pagesOut,totalPages:n,watchWidth:WW,watchHeight:WH,textSize:SZ};',
+    '    result={pages:pagesOut,totalPages:n,watchWidth:WW,watchHeight:WH,textSize:SZ,text:text,hpad:HPAD};',
     '  } else {',
     '    // CloudPebble: pass text + settings only; rendering done in index.js.',
     '    setStatus("Script sent. Rendering on CloudPebble emulator...","ok");',
-    '    result={text:document.getElementById("txt").value.trim(),watchWidth:WW,watchHeight:WH,textSize:SZ,hpad:HPAD};',
+    '    result={text:text,watchWidth:WW,watchHeight:WH,textSize:SZ,hpad:HPAD};',
     '  }',
     '  try {',
     '    document.location=RETURN_TO+encodeURIComponent(JSON.stringify(result));',
@@ -696,6 +749,30 @@ function buildConfigHtml() {
     '    document.getElementById("btnRender").disabled=false;',
     '  }',
     '}',
+
+    // Page init: auto-select the correct platform + size buttons, pre-fill stored text
+    '(function initPage(){',
+    '  // 選擇符合目前手錶尺寸的平台按鈕',
+    '  var pb=document.querySelectorAll("#platRow .seg-btn");',
+    '  pb.forEach(function(b){b.className="seg-btn";});',
+    '  var matched=false;',
+    '  pb.forEach(function(b){',
+    '    if(!matched && parseInt(b.getAttribute("data-w"))===WW && parseInt(b.getAttribute("data-h"))===WH){',
+    '      b.className="seg-btn active"; HPAD=parseInt(b.getAttribute("data-hpad")); matched=true;',
+    '    }',
+    '  });',
+    '  if(!matched && pb.length>0){pb[0].className="seg-btn active";}',
+    '  // 選擇符合目前文字大小的尺寸按鈕',
+    '  var sb=document.querySelectorAll("#sizeRow .seg-btn");',
+    '  sb.forEach(function(b){b.className="seg-btn";});',
+    '  sb.forEach(function(b){if(parseInt(b.getAttribute("data-sz"))===SZ)b.className="seg-btn active";});',
+    '  // 若有儲存的原始文字，預先填入文字框',
+    '  if(STORED_TEXT){',
+    '    document.getElementById("txt").value=STORED_TEXT;',
+    '    updateEstimate();',
+    '    setStatus("Previous text loaded. Tap Render to refresh pages.","");',
+    '  }',
+    '}());',
 
     '<\/script>',
     '</body>',
