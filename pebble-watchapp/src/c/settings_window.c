@@ -1,7 +1,7 @@
 /**
  * settings_window.c - 設定視窗實作
  *
- * 使用 MenuLayer 提供捲動速度、文字大小與頂部時間欄的調整介面。
+ * 使用 MenuLayer 提供捲動速度、文字大小、頂部時間欄以及跳頁功能的調整介面。
  */
 
 #include "settings_window.h"
@@ -15,15 +15,157 @@ static MenuLayer *s_menu_layer       = NULL;
 static int32_t       s_current_speed      = SCROLL_SPEED_DEFAULT;
 static TextSizeLevel s_current_size       = TEXT_SIZE_MEDIUM;
 static bool          s_current_status_bar = false;
+static int32_t       s_current_page       = 0;   // 1-indexed, 0=未載入
+static int32_t       s_total_pages        = 0;   // 0=未載入
 static SettingsChangedCallback s_change_callback = NULL;
+static JumpToPageCallback      s_jump_callback   = NULL;
 
 // 選單區段
 #define SECTION_SPEED     0
 #define SECTION_SIZE      1
 #define SECTION_STATUSBAR 2
-#define NUM_SECTIONS      3
+#define SECTION_JUMP      3
+#define NUM_SECTIONS      4
 
 static const char *SIZE_NAMES[] = { "Tiny", "Small", "Medium", "Large", "XLarge" };
+
+// ============================================================
+// 跳頁視窗
+// ============================================================
+static Window  *s_jump_window      = NULL;
+static Layer   *s_jump_layer       = NULL;
+static int32_t  s_jump_target_page = 1;   // 1-indexed 顯示值
+
+static void jump_layer_update_proc(Layer *layer, GContext *ctx) {
+    GRect bounds = layer_get_bounds(layer);
+    int sw = bounds.size.w;
+    int sh = bounds.size.h;
+
+    // 黑色背景
+    graphics_context_set_fill_color(ctx, GColorBlack);
+    graphics_fill_rect(ctx, bounds, 0, GCornerNone);
+
+    GFont label_font = fonts_get_system_font(FONT_KEY_GOTHIC_18);
+    GFont big_font   = fonts_get_system_font(FONT_KEY_BITHAM_42_BOLD);
+    GFont small_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
+
+    graphics_context_set_text_color(ctx, GColorWhite);
+
+    // "Jump to:" 標題
+#ifdef PBL_ROUND
+    int title_y = 30;
+#else
+    int title_y = 18;
+#endif
+    graphics_draw_text(ctx, "Jump to:",
+                       label_font,
+                       GRect(0, title_y, sw, 24),
+                       GTextOverflowModeTrailingEllipsis,
+                       GTextAlignmentCenter, NULL);
+
+    // 大號目標頁碼
+    char num_buf[8];
+    snprintf(num_buf, sizeof(num_buf), "%d", (int)s_jump_target_page);
+    graphics_draw_text(ctx, num_buf,
+                       big_font,
+                       GRect(0, sh / 2 - 28, sw, 55),
+                       GTextOverflowModeTrailingEllipsis,
+                       GTextAlignmentCenter, NULL);
+
+    // 目前頁碼 / 總頁數（提示用）
+    if (s_total_pages > 0) {
+        char info_buf[16];
+        snprintf(info_buf, sizeof(info_buf), "%d/%d",
+                 (int)s_current_page, (int)s_total_pages);
+#ifdef PBL_COLOR
+        graphics_context_set_text_color(ctx, GColorLightGray);
+#else
+        graphics_context_set_text_color(ctx, GColorWhite);
+#endif
+#ifdef PBL_ROUND
+        // 圓形螢幕：底部中央
+        graphics_draw_text(ctx, info_buf, small_font,
+                           GRect(sw / 2 - 30, sh - 22, 60, 16),
+                           GTextOverflowModeTrailingEllipsis,
+                           GTextAlignmentCenter, NULL);
+#else
+        // 矩形螢幕：右下角
+        graphics_draw_text(ctx, info_buf, small_font,
+                           GRect(sw - 58, sh - 20, 56, 16),
+                           GTextOverflowModeTrailingEllipsis,
+                           GTextAlignmentRight, NULL);
+#endif
+    }
+}
+
+static void jump_up_handler(ClickRecognizerRef recognizer, void *context) {
+    int32_t max = (s_total_pages > 0) ? s_total_pages : 9999;
+    if (s_jump_target_page < max) {
+        s_jump_target_page++;
+        layer_mark_dirty(s_jump_layer);
+    }
+}
+
+static void jump_down_handler(ClickRecognizerRef recognizer, void *context) {
+    if (s_jump_target_page > 1) {
+        s_jump_target_page--;
+        layer_mark_dirty(s_jump_layer);
+    }
+}
+
+static void jump_select_handler(ClickRecognizerRef recognizer, void *context) {
+    if (s_jump_callback && s_total_pages > 0) {
+        s_jump_callback(s_jump_target_page - 1);  // 轉為 0-indexed
+    }
+    // 關閉跳頁視窗與設定視窗，直接回到主畫面
+    if (s_jump_window) {
+        window_stack_remove(s_jump_window, true);
+    }
+    if (s_settings_window) {
+        window_stack_remove(s_settings_window, true);
+    }
+}
+
+static void jump_click_provider(void *context) {
+    window_single_repeating_click_subscribe(BUTTON_ID_UP,   150, jump_up_handler);
+    window_single_repeating_click_subscribe(BUTTON_ID_DOWN, 150, jump_down_handler);
+    window_single_click_subscribe(BUTTON_ID_SELECT, jump_select_handler);
+}
+
+static void jump_window_load(Window *window) {
+    Layer *window_layer = window_get_root_layer(window);
+    GRect  bounds       = layer_get_bounds(window_layer);
+
+    s_jump_layer = layer_create(bounds);
+    layer_set_update_proc(s_jump_layer, jump_layer_update_proc);
+    layer_add_child(window_layer, s_jump_layer);
+}
+
+static void deferred_jump_destroy(void *data) {
+    Window *window = (Window *)data;
+    if (window) window_destroy(window);
+}
+
+static void jump_window_unload(Window *window) {
+    layer_destroy(s_jump_layer);
+    s_jump_layer = NULL;
+    app_timer_register(0, deferred_jump_destroy, s_jump_window);
+    s_jump_window = NULL;
+}
+
+static void open_jump_window(void) {
+    // 以目前頁碼作為預設跳轉目標
+    s_jump_target_page = (s_current_page > 0) ? s_current_page : 1;
+
+    s_jump_window = window_create();
+    window_set_background_color(s_jump_window, GColorBlack);
+    window_set_click_config_provider(s_jump_window, jump_click_provider);
+    window_set_window_handlers(s_jump_window, (WindowHandlers){
+        .load   = jump_window_load,
+        .unload = jump_window_unload,
+    });
+    window_stack_push(s_jump_window, true);
+}
 
 // ============================================================
 // MenuLayer 回呼
@@ -36,9 +178,10 @@ static uint16_t menu_get_num_sections(MenuLayer *menu_layer, void *data) {
 static uint16_t menu_get_num_rows(MenuLayer *menu_layer, uint16_t section_index,
                                   void *data) {
     switch (section_index) {
-        case SECTION_SPEED:     return SCROLL_SPEED_MAX;  // 6 個速度等級
-        case SECTION_SIZE:      return 5;                  // Tiny/Small/Medium/Large/XLarge
-        case SECTION_STATUSBAR: return 1;                  // 開/關切換
+        case SECTION_SPEED:     return SCROLL_SPEED_MAX;
+        case SECTION_SIZE:      return 5;
+        case SECTION_STATUSBAR: return 1;
+        case SECTION_JUMP:      return 1;
         default: return 0;
     }
 }
@@ -55,6 +198,7 @@ static void menu_draw_header(GContext *ctx, const Layer *cell_layer,
         case SECTION_SPEED:     title = "Scroll Speed"; break;
         case SECTION_SIZE:      title = "Text Size";    break;
         case SECTION_STATUSBAR: title = "Display";      break;
+        case SECTION_JUMP:      title = "Navigation";   break;
         default:                title = "";              break;
     }
 
@@ -107,9 +251,19 @@ static void menu_draw_row(GContext *ctx, const Layer *cell_layer,
             break;
         }
         case SECTION_STATUSBAR: {
-            // 顯示目前狀態；點擊即切換
             const char *state = s_current_status_bar ? "On" : "Off";
             menu_cell_basic_draw(ctx, cell_layer, "Time Bar", state, NULL);
+            break;
+        }
+        case SECTION_JUMP: {
+            if (s_total_pages > 0) {
+                char sub[16];
+                snprintf(sub, sizeof(sub), "Pg %d/%d",
+                         (int)s_current_page, (int)s_total_pages);
+                menu_cell_basic_draw(ctx, cell_layer, "Jump to Page", sub, NULL);
+            } else {
+                menu_cell_basic_draw(ctx, cell_layer, "Jump to Page", "No doc", NULL);
+            }
             break;
         }
     }
@@ -137,10 +291,13 @@ static void menu_select_click(MenuLayer *menu_layer, MenuIndex *cell_index,
             break;
         }
         case SECTION_STATUSBAR: {
-            // 切換顯示狀態
             s_current_status_bar = !s_current_status_bar;
             changed = true;
             break;
+        }
+        case SECTION_JUMP: {
+            open_jump_window();
+            return;  // 不觸發 changed callback
         }
     }
 
@@ -196,11 +353,17 @@ static void settings_window_unload(Window *window) {
 
 void settings_window_push(int32_t speed, TextSizeLevel size,
                           bool show_status_bar,
-                          SettingsChangedCallback callback) {
+                          int32_t current_page,
+                          int32_t total_pages,
+                          SettingsChangedCallback changed_cb,
+                          JumpToPageCallback jump_cb) {
     s_current_speed      = speed;
     s_current_size       = size;
     s_current_status_bar = show_status_bar;
-    s_change_callback    = callback;
+    s_current_page       = current_page;
+    s_total_pages        = total_pages;
+    s_change_callback    = changed_cb;
+    s_jump_callback      = jump_cb;
 
     s_settings_window = window_create();
     window_set_window_handlers(s_settings_window, (WindowHandlers){

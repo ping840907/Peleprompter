@@ -195,6 +195,95 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
                 // 若下一頁尚未就緒，露出黑色背景即可（已清過）
             }
         }
+
+        // ── 頁數進度條 ───────────────────────────────────────────
+        {
+            int32_t total      = s_img_mgr.total_pages;
+            int32_t cur_page   = top_page + 1;  // 1-indexed
+            int32_t max_offset = get_max_scroll();
+
+#ifdef PBL_ROUND
+            // 圓形螢幕 (Chalk / Gabbro)：底部圓弧
+            // 弧段：120° → 240°（共 120°，位於螢幕底部）
+            const int32_t ARC_START  = 120;
+            const int32_t ARC_END    = 240;
+            const int32_t ARC_SPAN   = ARC_END - ARC_START;
+            const uint16_t ARC_THICK = 4;
+
+            // 背景弧（深灰）
+            graphics_context_set_fill_color(ctx, GColorDarkGray);
+            graphics_fill_radial(ctx, bounds, GOvalScaleModeFitCircle, ARC_THICK,
+                                 DEG_TO_TRIGANGLE(ARC_START),
+                                 DEG_TO_TRIGANGLE(ARC_END));
+
+            // 進度弧（白色）
+            if (max_offset > 0) {
+                int32_t prog_deg = ARC_START +
+                    (int32_t)((int64_t)s_scroll_offset_px * ARC_SPAN / max_offset);
+                if (prog_deg > ARC_END)   prog_deg = ARC_END;
+                if (prog_deg > ARC_START) {
+                    graphics_context_set_fill_color(ctx, GColorWhite);
+                    graphics_fill_radial(ctx, bounds, GOvalScaleModeFitCircle, ARC_THICK,
+                                         DEG_TO_TRIGANGLE(ARC_START),
+                                         DEG_TO_TRIGANGLE(prog_deg));
+                }
+            }
+
+            // 頁碼文字：弧形進度條正上方，底部中央
+            {
+                char page_buf[16];
+                snprintf(page_buf, sizeof(page_buf), "%d/%d", (int)cur_page, (int)total);
+                GFont tiny_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
+                // 文字 y = 弧內緣正上方 (螢幕高度 - 弧厚度 - 文字高度 - 小間距)
+                int32_t text_y = screen_h - ARC_THICK - 15;
+                GRect text_bg = GRect(screen_w / 2 - 28, text_y, 56, 14);
+                graphics_context_set_fill_color(ctx, GColorBlack);
+                graphics_fill_rect(ctx, text_bg, 0, GCornerNone);
+                graphics_context_set_text_color(ctx, GColorWhite);
+                graphics_draw_text(ctx, page_buf, tiny_font,
+                                   GRect(screen_w / 2 - 27, text_y, 54, 14),
+                                   GTextOverflowModeTrailingEllipsis,
+                                   GTextAlignmentCenter, NULL);
+            }
+#else
+            // 矩形螢幕：底部細長進度條 + 右下角頁碼
+            const int32_t BAR_H    = 3;
+            const int32_t TEXT_W   = 54;
+            const int32_t TEXT_H   = 14;
+            int32_t bar_y = screen_h - BAR_H;
+
+            // 進度條背景（彩色平台用深灰，B&W 保持黑色背景）
+#ifdef PBL_COLOR
+            graphics_context_set_fill_color(ctx, GColorDarkGray);
+            graphics_fill_rect(ctx, GRect(0, bar_y, screen_w, BAR_H), 0, GCornerNone);
+#endif
+            // 白色進度填充
+            if (max_offset > 0) {
+                int32_t fill_w = (int32_t)((int64_t)s_scroll_offset_px * screen_w / max_offset);
+                if (fill_w < 0) fill_w = 0;
+                if (fill_w > screen_w) fill_w = screen_w;
+                graphics_context_set_fill_color(ctx, GColorWhite);
+                graphics_fill_rect(ctx, GRect(0, bar_y, fill_w, BAR_H), 0, GCornerNone);
+            }
+
+            // 頁碼文字：右下角，進度條正上方
+            {
+                char page_buf[16];
+                snprintf(page_buf, sizeof(page_buf), "%d/%d", (int)cur_page, (int)total);
+                GFont tiny_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
+                int32_t text_y  = bar_y - TEXT_H;
+                // 黑色背景確保文字在任何內容上都清晰可見
+                graphics_context_set_fill_color(ctx, GColorBlack);
+                graphics_fill_rect(ctx, GRect(screen_w - TEXT_W, text_y, TEXT_W, TEXT_H),
+                                   0, GCornerNone);
+                graphics_context_set_text_color(ctx, GColorWhite);
+                graphics_draw_text(ctx, page_buf, tiny_font,
+                                   GRect(screen_w - TEXT_W + 2, text_y, TEXT_W - 4, TEXT_H),
+                                   GTextOverflowModeTrailingEllipsis,
+                                   GTextAlignmentRight, NULL);
+            }
+#endif  // PBL_ROUND
+        }
     }
 
 draw_warning:
@@ -391,10 +480,19 @@ static void select_short_click(ClickRecognizerRef recognizer, void *context) {
 }
 
 static void on_settings_changed(int32_t speed, TextSizeLevel size, bool show_status_bar);
+static void on_jump_to_page(int32_t page_num);
 static void apply_status_bar(void);
 
 static void select_long_click(ClickRecognizerRef recognizer, void *context) {
-    settings_window_push(s_scroll_speed, s_text_size, s_show_status_bar, on_settings_changed);
+    int32_t cur_page   = 0;
+    int32_t total_pgs  = 0;
+    if (s_images_initialized && s_img_mgr.page_height > 0) {
+        cur_page  = s_scroll_offset_px / s_img_mgr.page_height + 1;
+        total_pgs = s_img_mgr.total_pages;
+    }
+    settings_window_push(s_scroll_speed, s_text_size, s_show_status_bar,
+                         cur_page, total_pgs,
+                         on_settings_changed, on_jump_to_page);
 }
 
 static void click_config_provider(void *context) {
@@ -529,6 +627,31 @@ static void on_settings_changed(int32_t speed, TextSizeLevel size, bool show_sta
     if (s_auto_scroll_active && !s_manual_pause_active) {
         schedule_auto_scroll();
     }
+}
+
+/** 跳頁回呼（從跳頁視窗確認後呼叫，page_num 為 0-indexed）*/
+static void on_jump_to_page(int32_t page_num) {
+    if (!s_images_initialized || s_img_mgr.total_pages == 0) return;
+
+    int32_t ph = s_img_mgr.page_height;
+    if (ph <= 0) return;
+
+    int32_t target = page_num * ph;
+    int32_t max    = get_max_scroll();
+    if (target < 0) target = 0;
+    if (target > max) target = max;
+
+    s_scroll_offset_px = target;
+    s_target_scroll_px = -1;
+
+    // 取消正在進行的手動動畫
+    if (s_manual_anim_timer) {
+        app_timer_cancel(s_manual_anim_timer);
+        s_manual_anim_timer = NULL;
+    }
+
+    layer_mark_dirty(s_canvas_layer);
+    check_prefetch();
 }
 
 /** 藍牙連線狀態改變 */
