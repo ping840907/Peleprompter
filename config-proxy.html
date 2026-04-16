@@ -17,10 +17,22 @@
 
   var html;
   try {
-    html = decodeURIComponent(hash);
+    var decoded = decodeURIComponent(hash);
+    // If the URL-decoded result looks like HTML, use it directly.
+    // Otherwise treat it as base64 (Core Devices emulator may base64-encode the HTML).
+    if (decoded.indexOf('<') === 0) {
+      html = decoded;
+    } else {
+      html = atob(decoded);
+    }
   } catch (e) {
-    document.body.textContent = 'Error: failed to decode config data.';
-    return;
+    // Last resort: try raw base64 decode of the hash fragment.
+    try {
+      html = atob(hash);
+    } catch (e2) {
+      document.body.textContent = 'Error: failed to decode config data.';
+      return;
+    }
   }
 
   var m = window.location.search.match(/[?&]return_to=([^&]*)/);
