@@ -6,7 +6,6 @@ A teleprompter application for **Pebble smartwatches** with an **Android compani
 
 ```
 peleprompter/
-├── config-proxy.html                # GitHub Pages proxy for CloudPebble config support
 ├── pebble-watchapp/
 │   ├── package.json                 # App UUID, platform targets, resource declarations
 │   ├── resources/images/
@@ -187,10 +186,6 @@ Accessible from the Pebble mobile app's settings gear. The config page is built 
 - Select platform (Aplite/Basalt · Chalk · Emery · Gabbro)
 - Select text size (Tiny → XLarge)
 - **Render & Connect** — renders all pages client-side using an HTML `<canvas>`, encodes them as 1-bit bitmaps, and passes the result back to PebbleKit JS
-
-**CloudPebble support:** When running in the CloudPebble emulator (`Pebble.platform === 'pypkjs'`), the config page is opened via `config-proxy.html` (served from GitHub Pages) instead of a `data:` URI. The proxy decodes the HTML from the URL hash, substitutes the CloudPebble-injected `return_to` URL for the `$$RETURN_TO$$` placeholder, and opens the result as a Blob URL (required since Chrome 60+ blocks `data:` URI navigation from web pages).
-
-> **Prerequisite:** Enable GitHub Pages on this repository (Settings → Pages → branch: main, folder: `/`) for CloudPebble support to work.
 
 ## Building
 
