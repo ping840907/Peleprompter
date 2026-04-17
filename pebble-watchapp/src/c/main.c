@@ -289,33 +289,9 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
             int32_t max_offset = get_max_scroll();
 
 #ifdef PBL_ROUND
-            // 圓形螢幕 (Chalk / Gabbro)：底部圓弧
-            // 弧段：120° → 240°（共 120°，位於螢幕底部）
-            const int32_t ARC_START  = 120;
-            const int32_t ARC_END    = 240;
-            const int32_t ARC_SPAN   = ARC_END - ARC_START;
-            const uint16_t ARC_THICK = 4;
-
-            // 背景弧（深灰）
-            graphics_context_set_fill_color(ctx, GColorDarkGray);
-            graphics_fill_radial(ctx, bounds, GOvalScaleModeFitCircle, ARC_THICK,
-                                 DEG_TO_TRIGANGLE(ARC_START),
-                                 DEG_TO_TRIGANGLE(ARC_END));
-
-            // 進度弧（白色）
-            if (max_offset > 0) {
-                int32_t prog_deg = ARC_START +
-                    (int32_t)((int64_t)s_scroll_offset_px * ARC_SPAN / max_offset);
-                if (prog_deg > ARC_END)   prog_deg = ARC_END;
-                if (prog_deg > ARC_START) {
-                    graphics_context_set_fill_color(ctx, GColorWhite);
-                    graphics_fill_radial(ctx, bounds, GOvalScaleModeFitCircle, ARC_THICK,
-                                         DEG_TO_TRIGANGLE(ARC_START),
-                                         DEG_TO_TRIGANGLE(prog_deg));
-                }
-            }
-
             // 弧形進度條正上方：兩行文字（百分比 + 頁碼）
+            // 先繪製文字和背景，以避免文字黑底切斷圓弧
+            const uint16_t ARC_THICK = 4;
             {
                 GFont tiny_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
                 const int32_t TH = 14;  // 行高
@@ -351,6 +327,35 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
                                    GTextOverflowModeTrailingEllipsis,
                                    GTextAlignmentCenter, NULL);
             }
+
+            // 圓形螢幕 (Chalk / Gabbro)：底部圓弧
+            // 弧段：120° → 240°（共 120°，位於螢幕底部）
+            // 由於可能受頂部狀態列影響，此處定義與手錶等寬的方形區域作為基準，確保其對齊手錶底部實體圓弧
+            GRect arc_bounds = GRect(0, screen_h - screen_w, screen_w, screen_w);
+            const int32_t ARC_START  = 120;
+            const int32_t ARC_END    = 240;
+            const int32_t ARC_SPAN   = ARC_END - ARC_START;
+
+            // 背景弧（深灰）
+            graphics_context_set_fill_color(ctx, GColorDarkGray);
+            graphics_fill_radial(ctx, arc_bounds, GOvalScaleModeFitCircle, ARC_THICK,
+                                 DEG_TO_TRIGANGLE(ARC_START),
+                                 DEG_TO_TRIGANGLE(ARC_END));
+
+            // 進度弧（白色）
+            if (max_offset > 0) {
+                // 為了達成由左向右填滿，起點固定在左側 (240°)，隨進度變小至右側 (120°)
+                int32_t prog_deg = ARC_END -
+                    (int32_t)((int64_t)s_scroll_offset_px * ARC_SPAN / max_offset);
+                if (prog_deg < ARC_START) prog_deg = ARC_START;
+                if (prog_deg < ARC_END) {
+                    graphics_context_set_fill_color(ctx, GColorWhite);
+                    graphics_fill_radial(ctx, arc_bounds, GOvalScaleModeFitCircle, ARC_THICK,
+                                         DEG_TO_TRIGANGLE(prog_deg),
+                                         DEG_TO_TRIGANGLE(ARC_END));
+                }
+            }
+
 #else
             // 矩形螢幕：底部細長進度條 + 右下角頁碼
             const int32_t BAR_H    = 3;
