@@ -240,16 +240,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun setDocument(doc: TextDocument) {
         _currentDocument.value = doc
         commManager.setCurrentDocument(doc)
-        getApplication<PeleprompterApp>().currentDocument = doc
         _statusMessage.value = "Loaded: ${doc.title} (${doc.totalLength} chars)"
     }
 
-    /** 清除目前載入的稿件（同時清除通訊管理員與 App 全域文件，避免手錶仍收到舊內容） */
+    /** 清除目前載入的稿件（同時清除通訊管理員狀態，避免手錶仍收到舊內容） */
     fun clearCurrentDocument() {
         _currentDocument.value = null
         _sourceType.value = SourceType.NONE
         commManager.clearDocument()
-        getApplication<PeleprompterApp>().currentDocument = null
         _statusMessage.value = "Script cleared"
     }
 

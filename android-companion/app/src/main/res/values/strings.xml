@@ -32,6 +32,5 @@
     <!-- Misc -->
     <string name="status_connected">Connected</string>
     <string name="status_disconnected">Not connected</string>
-    <string name="btn_preview">Preview</string>
     <string name="status_ready">Ready</string>
 </resources>
