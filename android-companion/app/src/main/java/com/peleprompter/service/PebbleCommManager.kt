@@ -71,6 +71,19 @@ class PebbleCommManager(
     private var retryCount = 0
     private val maxRetries = 3
 
+    /**
+     * 傳送逾時：藍牙不穩時 ACK/NACK 可能永遠不回來，導致 isSendingMessage
+     * 永久為 true、整條傳送鏈卡死。逾時後視為失敗，放棄此筆並推進佇列。
+     */
+    private val sendTimeoutMs = 5000L
+    private val sendTimeoutRunnable = Runnable {
+        Log.w(TAG, "傳送逾時（無 ACK/NACK），放棄此筆並繼續佇列")
+        retryCount = 0
+        lastSentDict = null
+        isSendingMessage = false
+        processQueue()
+    }
+
     // ── 狀態回呼 ────────────────────────────────────────────────
     var onBookmarkUpdated: ((Int) -> Unit)? = null
     var onWatchRequestReceived: ((Int) -> Unit)? = null
@@ -118,6 +131,7 @@ class PebbleCommManager(
         ackReceiver = object : PebbleKit.PebbleAckReceiver(PebbleProtocol.PEBBLE_APP_UUID) {
             override fun receiveAck(context: Context, transactionId: Int) {
                 Log.d(TAG, "ACK: txId=$transactionId")
+                handler.removeCallbacks(sendTimeoutRunnable)
                 retryCount = 0
                 lastSentDict = null
                 isSendingMessage = false
@@ -129,6 +143,7 @@ class PebbleCommManager(
         nackReceiver = object : PebbleKit.PebbleNackReceiver(PebbleProtocol.PEBBLE_APP_UUID) {
             override fun receiveNack(context: Context, transactionId: Int) {
                 Log.w(TAG, "NACK: txId=$transactionId, retry=$retryCount")
+                handler.removeCallbacks(sendTimeoutRunnable)
                 if (retryCount < maxRetries && lastSentDict != null) {
                     retryCount++
                     handler.postDelayed({
@@ -184,6 +199,15 @@ class PebbleCommManager(
     }
 
     fun getCurrentDocument(): TextDocument? = currentDocument
+
+    /** 清除目前文件與所有渲染狀態（使用者清除稿件時呼叫） */
+    fun clearDocument() {
+        currentDocument = null
+        pageCache.clear()
+        renderer?.invalidateCache()
+        renderer = null
+        Log.i(TAG, "已清除目前文件與渲染快取")
+    }
 
     // ================================================================
     // 處理手錶訊息
@@ -260,13 +284,18 @@ class PebbleCommManager(
         val r = renderer!!
         val totalPages = r.computeTotalPages(doc)
 
-        Log.i(TAG, "回傳 INIT_IMAGES: pages=$totalPages, ${watchW}x${watchH}")
+        // 依書籤計算起始頁，讓手錶可從上次閱讀位置續讀
+        val startPage = r.pageForCharOffset(doc, doc.bookmarkOffset)
+            .coerceIn(0, (totalPages - 1).coerceAtLeast(0))
+
+        Log.i(TAG, "回傳 INIT_IMAGES: pages=$totalPages, ${watchW}x${watchH}, startPage=$startPage")
 
         val dict = PebbleDictionary().apply {
             addInt32(PebbleProtocol.KEY_COMMAND,      PebbleProtocol.CMD_INIT_IMAGES)
             addInt32(PebbleProtocol.KEY_TOTAL_PAGES,  totalPages)
             addInt32(PebbleProtocol.KEY_WATCH_WIDTH,  watchW)
             addInt32(PebbleProtocol.KEY_WATCH_HEIGHT, watchH)
+            addInt32(PebbleProtocol.KEY_START_PAGE,   startPage)
         }
         enqueue(dict)
     }
@@ -279,17 +308,18 @@ class PebbleCommManager(
         val r   = renderer ?: run { Log.w(TAG, "渲染器尚未初始化"); return }
         val doc = currentDocument ?: run { Log.w(TAG, "無文件"); return }
 
-        if (pageNum < 0 || pageNum >= r.computeTotalPages(doc)) {
+        val totalPages = r.computeTotalPages(doc)
+        if (pageNum < 0 || pageNum >= totalPages) {
             Log.w(TAG, "頁碼超出範圍: $pageNum")
             return
         }
 
-        // 更新書籤（以頁碼估算位元組偏移）
-        val estimatedOffset = (pageNum.toLong() * doc.totalLength / r.computeTotalPages(doc)).toInt()
-        if (estimatedOffset > doc.bookmarkOffset) {
-            doc.bookmarkOffset = estimatedOffset
-            prefsManager.saveBookmark(doc.id, estimatedOffset)
-            onBookmarkUpdated?.invoke(estimatedOffset)
+        // 更新書籤：以實際排版位置反推字元偏移，取代過去不準的均勻估算
+        val charOffset = r.charOffsetForPage(doc, pageNum)
+        if (charOffset > doc.bookmarkOffset) {
+            doc.bookmarkOffset = charOffset
+            prefsManager.saveBookmark(doc.id, charOffset)
+            onBookmarkUpdated?.invoke(charOffset)
         }
 
         // 從快取或重新渲染
@@ -351,6 +381,9 @@ class PebbleCommManager(
         lastSentDict = dict
         if (!isRetry) retryCount = 0
         PebbleKit.sendDataToPebble(context, PebbleProtocol.PEBBLE_APP_UUID, dict)
+        // 排程逾時，避免 ACK/NACK 永不回來而卡死整條佇列
+        handler.removeCallbacks(sendTimeoutRunnable)
+        handler.postDelayed(sendTimeoutRunnable, sendTimeoutMs)
     }
 
     // ================================================================

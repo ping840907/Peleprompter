@@ -187,6 +187,10 @@ static void check_prefetch(void) {
     int32_t bottom_page   = (s_scroll_offset_px + screen_h - 1) / ph;
     int32_t px_to_next_pg = ph - (s_scroll_offset_px % ph);  // 距下一頁邊界
 
+    // 目前畫面涵蓋的頁面範圍受保護，分配新插槽時不可被淘汰
+    int32_t protect_lo = top_page;
+    int32_t protect_hi = bottom_page;
+
     // 向下預取：距下一頁邊界不足門檻時預取 top_page+1, top_page+2
     int32_t prefetch_pages = (ph > screen_h) ? 1 : 2;
     for (int32_t pg = bottom_page + 1; pg <= top_page + prefetch_pages; pg++) {
@@ -195,7 +199,10 @@ static void check_prefetch(void) {
             && !image_manager_is_loading(&s_img_mgr, pg)) {
             // 在距頁面邊界還有足夠空間時才預取，避免過早請求
             if (px_to_next_pg < IMAGE_PREFETCH_THRESHOLD_PX || pg == bottom_page + 1) {
-                image_manager_alloc_slot(&s_img_mgr, pg);
+                // 若無法騰出插槽（會踢掉可見頁），略過此次預取以免鎖死
+                if (!image_manager_alloc_slot(&s_img_mgr, pg, protect_lo, protect_hi)) {
+                    return;
+                }
                 messaging_request_page(pg);
                 s_waiting_for_page = true;
                 start_page_timeout(pg);
@@ -209,9 +216,11 @@ static void check_prefetch(void) {
         int32_t prev_pg = top_page - 1;
         if (!image_manager_is_ready(&s_img_mgr, prev_pg)
             && !image_manager_is_loading(&s_img_mgr, prev_pg)) {
-            image_manager_alloc_slot(&s_img_mgr, prev_pg);
-            messaging_request_page(prev_pg);
-            s_waiting_for_page = true;
+            if (image_manager_alloc_slot(&s_img_mgr, prev_pg, protect_lo, protect_hi)) {
+                messaging_request_page(prev_pg);
+                s_waiting_for_page = true;
+                start_page_timeout(prev_pg);   // 與向下預取一致，避免無逾時鎖死
+            }
         }
     }
 }
@@ -649,6 +658,7 @@ static void select_long_click(ClickRecognizerRef recognizer, void *context) {
     if (s_images_initialized && s_img_mgr.page_height > 0) {
         cur_page  = s_scroll_offset_px / s_img_mgr.page_height + 1;
         total_pgs = s_img_mgr.total_pages;
+        if (cur_page > total_pgs) cur_page = total_pgs;   // 鉗制避免邊界 off-by-one
         int32_t max = get_max_scroll();
         if (max > 0) {
             cur_pct = (int32_t)((int64_t)s_scroll_offset_px * 100 / max);
@@ -671,29 +681,42 @@ static void click_config_provider(void *context) {
 // 通訊回呼
 // ============================================================
 
-/** 收到 CMD_INIT_IMAGES：手機已計算好總頁數，開始請求第 0 頁 */
+/** 收到 CMD_INIT_IMAGES：手機已計算好總頁數，從起始頁開始請求 */
 static void on_images_initialized(int32_t total_pages,
                                    int32_t page_width,
-                                   int32_t page_height) {
+                                   int32_t page_height,
+                                   int32_t start_page) {
     s_images_initialized = true;
-    s_scroll_offset_px   = 0;
     s_target_scroll_px   = -1;
+    cancel_page_timeout();
+    s_waiting_for_page = false;
 
     image_manager_set_dimensions(&s_img_mgr, total_pages, page_width, page_height);
+
+    // 依書籤起始頁設定捲動位置（鉗制於有效範圍）
+    if (start_page < 0) start_page = 0;
+    if (start_page >= total_pages) start_page = total_pages - 1;
+    if (start_page < 0) start_page = 0;
+    s_scroll_offset_px = start_page * page_height;
+    int32_t max_scroll = get_max_scroll();
+    if (s_scroll_offset_px > max_scroll) s_scroll_offset_px = max_scroll;
 
     // 隱藏 "Waiting for text..." 狀態
     layer_set_hidden(text_layer_get_layer(s_status_layer), true);
     s_show_disconnect_warning = false;
 
-    // 立即請求第 0 頁
-    image_manager_alloc_slot(&s_img_mgr, 0);
-    messaging_request_page(0);
-    s_waiting_for_page = true;
-    start_page_timeout(0);
+    // 立即請求起始頁
+    if (image_manager_alloc_slot(&s_img_mgr, start_page, start_page, start_page)) {
+        messaging_request_page(start_page);
+        s_waiting_for_page = true;
+        start_page_timeout(start_page);
+    }
+
+    if (s_canvas_layer) layer_mark_dirty(s_canvas_layer);
 
     APP_LOG(APP_LOG_LEVEL_INFO,
-            "圖片模式初始化：%ld 頁, %ldx%ld",
-            (long)total_pages, (long)page_width, (long)page_height);
+            "圖片模式初始化：%ld 頁, %ldx%ld, 起始頁 %ld",
+            (long)total_pages, (long)page_width, (long)page_height, (long)start_page);
 }
 
 /** 收到圖片區塊 */
@@ -747,6 +770,8 @@ static void on_settings_synced(int32_t scroll_speed, int32_t text_size) {
     if (needs_reinit && s_canvas_layer) {
         // 重新初始化：清空快取，向手機請求以新字型大小重新渲染
         s_images_initialized = false;
+        cancel_page_timeout();          // 取消對舊頁的逾時重送
+        s_waiting_for_page = false;     // 解除頁面鎖，避免阻擋新的預取
         image_manager_deinit(&s_img_mgr);
 
         GRect bounds = layer_get_bounds(s_canvas_layer);
@@ -780,6 +805,8 @@ static void on_settings_changed(int32_t speed, TextSizeLevel size, bool show_sta
 
     if (needs_reinit && s_canvas_layer) {
         s_images_initialized = false;
+        cancel_page_timeout();          // 取消對舊頁的逾時重送
+        s_waiting_for_page = false;     // 解除頁面鎖，避免阻擋新的預取
         image_manager_deinit(&s_img_mgr);
 
         // 使用更新後的 canvas 尺寸（已反映時間欄高度）

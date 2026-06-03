@@ -9,8 +9,8 @@ import java.util.UUID
  * 圖片渲染模式：手機渲染文字成 1-bit 圖片後分頁傳送給手錶。
  */
 object PebbleProtocol {
-    /** Pebble App UUID - 必須與 package.json 中的一致 */
-    val PEBBLE_APP_UUID: UUID = UUID.fromString("1ced8e88-c6d6-476d-8f55-dc51edf6d9a7")
+    /** Pebble App UUID - 必須與 pebble-watchapp/package.json 中的一致 */
+    val PEBBLE_APP_UUID: UUID = UUID.fromString("aeae6be1-da66-49f9-8120-53243a5c9f92")
 
     // ── AppMessage 字典鍵值 ─────────────────────────────────────
     const val KEY_COMMAND      = 0
@@ -23,6 +23,7 @@ object PebbleProtocol {
     const val KEY_TOTAL_PAGES  = 9
     const val KEY_WATCH_WIDTH  = 10
     const val KEY_WATCH_HEIGHT = 11
+    const val KEY_START_PAGE   = 12   // 初始化起始頁 (0-indexed)，供書籤續讀
 
     // ── 指令類型 ────────────────────────────────────────────────
     const val CMD_REQUEST_TEXT     = 0   // 手錶→手機：初始化請求（含螢幕尺寸）

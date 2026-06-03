@@ -5,15 +5,17 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.viewModelScope
 import com.peleprompter.PeleprompterApp
 import com.peleprompter.model.ImportHistoryEntry
 import com.peleprompter.model.TextDocument
 import com.peleprompter.model.WatchSettings
 import com.peleprompter.service.PebbleCommManager
 import com.peleprompter.util.EpubTextExtractor
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.BufferedReader
-import java.io.File
-import java.io.FileInputStream
 import java.io.InputStreamReader
 import java.util.UUID
 
@@ -96,30 +98,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         val docId = UUID.randomUUID().toString()
 
-        // 將貼上的文字儲存到內部檔案，以便日後從歷史重新載入
-        val savedUri = savePastedTextToInternal(docId, text)
+        viewModelScope.launch {
+            // 檔案寫入與歷史儲存移至背景執行緒，避免阻塞 UI（ANR）
+            val savedUri = withContext(Dispatchers.IO) { savePastedTextToInternal(docId, text) }
 
-        val doc = TextDocument(
-            id = docId,
-            title = title,
-            content = text,
-            sourcePath = savedUri
-        )
-        _sourceType.value = SourceType.PASTE
-        setDocument(doc)
+            val doc = TextDocument(
+                id = docId,
+                title = title,
+                content = text,
+                sourcePath = savedUri
+            )
+            _sourceType.value = SourceType.PASTE
+            setDocument(doc)
 
-        // 儲存匯入歷史
-        val preview = text.take(100).replace("\n", " ")
-        val entry = ImportHistoryEntry(
-            id = docId,
-            title = title,
-            bookmarkOffset = 0,
-            importedAt = System.currentTimeMillis(),
-            sourcePath = savedUri,
-            contentPreview = preview
-        )
-        prefs.saveImportHistoryEntry(entry)
-        refreshHistory()
+            // 儲存匯入歷史
+            val preview = text.take(100).replace("\n", " ")
+            val entry = ImportHistoryEntry(
+                id = docId,
+                title = title,
+                bookmarkOffset = 0,
+                importedAt = System.currentTimeMillis(),
+                sourcePath = savedUri,
+                contentPreview = preview
+            )
+            withContext(Dispatchers.IO) { prefs.saveImportHistoryEntry(entry) }
+            refreshHistory()
+        }
     }
 
     /**
@@ -135,51 +139,54 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** 從 .txt 或 .epub 檔案 URI 匯入 */
     fun loadFromFileUri(uri: Uri, fileName: String? = null) {
-        try {
-            val context = getApplication<PeleprompterApp>()
-            val inputStream = context.contentResolver.openInputStream(uri)
-                ?: throw Exception("Cannot open file")
+        viewModelScope.launch {
+            try {
+                val context = getApplication<PeleprompterApp>()
+                // 讀檔與（EPUB）解析在背景執行緒，避免大檔阻塞 UI（ANR）
+                val text = withContext(Dispatchers.IO) {
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                        ?: throw Exception("Cannot open file")
+                    val isEpub = fileName?.endsWith(".epub", ignoreCase = true) == true ||
+                                 context.contentResolver.getType(uri) == "application/epub+zip"
+                    if (isEpub) {
+                        EpubTextExtractor.extract(inputStream).also { inputStream.close() }
+                    } else {
+                        BufferedReader(InputStreamReader(inputStream)).use { it.readText() }
+                    }
+                }
 
-            val isEpub = fileName?.endsWith(".epub", ignoreCase = true) == true ||
-                         context.contentResolver.getType(uri) == "application/epub+zip"
+                if (text.isBlank()) {
+                    _statusMessage.value = "File is empty"
+                    return@launch
+                }
 
-            val text = if (isEpub) {
-                EpubTextExtractor.extract(inputStream).also { inputStream.close() }
-            } else {
-                BufferedReader(InputStreamReader(inputStream)).use { it.readText() }
+                val displayName = fileName ?: uri.lastPathSegment ?: "Imported File"
+                val docId = UUID.randomUUID().toString()
+                val doc = TextDocument(
+                    id = docId,
+                    title = displayName,
+                    content = text,
+                    sourcePath = uri.toString()
+                )
+                _sourceType.value = SourceType.FILE
+                setDocument(doc)
+
+                // 儲存匯入歷史
+                val preview = text.take(100).replace("\n", " ")
+                val entry = ImportHistoryEntry(
+                    id = docId,
+                    title = displayName,
+                    bookmarkOffset = 0,
+                    importedAt = System.currentTimeMillis(),
+                    sourcePath = uri.toString(),
+                    contentPreview = preview
+                )
+                withContext(Dispatchers.IO) { prefs.saveImportHistoryEntry(entry) }
+                refreshHistory()
+
+            } catch (e: Exception) {
+                _statusMessage.value = "Failed to import file: ${e.message}"
             }
-
-            if (text.isBlank()) {
-                _statusMessage.value = "File is empty"
-                return
-            }
-
-            val displayName = fileName ?: uri.lastPathSegment ?: "Imported File"
-            val docId = UUID.randomUUID().toString()
-            val doc = TextDocument(
-                id = docId,
-                title = displayName,
-                content = text,
-                sourcePath = uri.toString()
-            )
-            _sourceType.value = SourceType.FILE
-            setDocument(doc)
-
-            // 儲存匯入歷史
-            val preview = text.take(100).replace("\n", " ")
-            val entry = ImportHistoryEntry(
-                id = docId,
-                title = displayName,
-                bookmarkOffset = 0,
-                importedAt = System.currentTimeMillis(),
-                sourcePath = uri.toString(),
-                contentPreview = preview
-            )
-            prefs.saveImportHistoryEntry(entry)
-            refreshHistory()
-
-        } catch (e: Exception) {
-            _statusMessage.value = "Failed to import file: ${e.message}"
         }
     }
 
@@ -190,40 +197,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         val uri = Uri.parse(entry.sourcePath)
-        try {
-            val context = getApplication<PeleprompterApp>()
+        viewModelScope.launch {
+            try {
+                val context = getApplication<PeleprompterApp>()
 
-            // 根據 URI scheme 選擇讀取方式
-            val inputStream = when (uri.scheme) {
-                "file" -> {
-                    // 內部儲存的貼上文字 (file:// URI)
-                    val file = java.io.File(uri.path!!)
-                    if (!file.exists()) throw Exception("File no longer exists")
-                    java.io.FileInputStream(file)
+                // 讀檔在背景執行緒，避免阻塞 UI（ANR）
+                val text = withContext(Dispatchers.IO) {
+                    val inputStream = when (uri.scheme) {
+                        "file" -> {
+                            // 內部儲存的貼上文字 (file:// URI)
+                            val file = java.io.File(uri.path!!)
+                            if (!file.exists()) throw Exception("File no longer exists")
+                            java.io.FileInputStream(file)
+                        }
+                        else -> {
+                            // SAF content:// URI (外部 .txt 匯入)
+                            context.contentResolver.openInputStream(uri)
+                                ?: throw Exception("Cannot open file — it may have been moved or deleted")
+                        }
+                    }
+                    // use{} 會自動關閉整個串流鏈
+                    BufferedReader(InputStreamReader(inputStream)).use { it.readText() }
                 }
-                else -> {
-                    // SAF content:// URI (外部 .txt 匯入)
-                    context.contentResolver.openInputStream(uri)
-                        ?: throw Exception("Cannot open file — it may have been moved or deleted")
-                }
+
+                val doc = TextDocument(
+                    id = entry.id,
+                    title = entry.title,
+                    content = text,
+                    bookmarkOffset = prefs.getBookmark(entry.id),
+                    sourcePath = entry.sourcePath
+                )
+                // file:// 為內部儲存的貼上文字；content:// 為外部 .txt 匯入
+                _sourceType.value = if (uri.scheme == "file") SourceType.PASTE else SourceType.FILE
+                setDocument(doc)
+
+            } catch (e: Exception) {
+                _statusMessage.value = "Cannot reload file: ${e.message}"
             }
-
-            // use{} 會自動關閉整個串流鏈
-            val text = BufferedReader(InputStreamReader(inputStream)).use { it.readText() }
-
-            val doc = TextDocument(
-                id = entry.id,
-                title = entry.title,
-                content = text,
-                bookmarkOffset = prefs.getBookmark(entry.id),
-                sourcePath = entry.sourcePath
-            )
-            // file:// 為內部儲存的貼上文字；content:// 為外部 .txt 匯入
-            _sourceType.value = if (uri.scheme == "file") SourceType.PASTE else SourceType.FILE
-            setDocument(doc)
-
-        } catch (e: Exception) {
-            _statusMessage.value = "Cannot reload file: ${e.message}"
         }
     }
 
@@ -234,10 +244,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _statusMessage.value = "Loaded: ${doc.title} (${doc.totalLength} chars)"
     }
 
-    /** 清除目前載入的稿件 */
+    /** 清除目前載入的稿件（同時清除通訊管理員與 App 全域文件，避免手錶仍收到舊內容） */
     fun clearCurrentDocument() {
         _currentDocument.value = null
         _sourceType.value = SourceType.NONE
+        commManager.clearDocument()
+        getApplication<PeleprompterApp>().currentDocument = null
         _statusMessage.value = "Script cleared"
     }
 

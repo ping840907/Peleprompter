@@ -9,6 +9,7 @@ import android.util.Log
 import com.peleprompter.model.TextDocument
 import com.peleprompter.service.WatchImageRenderer
 import com.peleprompter.util.PebbleProtocol
+import java.util.concurrent.ConcurrentHashMap
 
 // ─────────────────────────────────────────────────────────────────
 // Platform definitions
@@ -78,8 +79,12 @@ class WatchSimulator(
     /**
      * 已解碼頁面的 Bitmap 快取。
      * 手錶端 C code 只快取 2–3 頁；這裡不設上限，因 Android 記憶體充裕且測試目的不同。
+     * 使用 ConcurrentHashMap：render 執行緒寫入、主執行緒讀取，需跨執行緒安全存取。
      */
-    private val pageCache = mutableMapOf<Int, Bitmap>()
+    private val pageCache = ConcurrentHashMap<Int, Bitmap>()
+
+    /** cleanup 後設為 true，阻止仍在佇列中的 render 任務回呼操作已釋放的資源 */
+    @Volatile private var isCleanedUp = false
 
     // ── 手錶狀態 ────────────────────────────────────────────────
     var scrollPx: Int = 0
@@ -94,7 +99,7 @@ class WatchSimulator(
     var scrollSpeed: Int = 3  // 1–6
 
     /** 捲動間隔（ms），索引 0 不用，與 C 端 SCROLL_INTERVALS_MS 對齊 */
-    private val scrollIntervals = intArrayOf(0, 120, 90, 60, 40, 25, 15)
+    private val scrollIntervals = intArrayOf(0, 120, 90, 65, 45, 30, 18)
 
     // ── 執行緒 ─────────────────────────────────────────────────
     private val renderThread = HandlerThread("WatchSimRender").also { it.start() }
@@ -128,6 +133,7 @@ class WatchSimulator(
             isInitialized = true
 
             mainHandler.post {
+                if (isCleanedUp) return@post
                 log(LogType.RX, "PHONE→WATCH",
                     "CMD_INIT_IMAGES | totalPages=$totalPages width=${platform.screenWidth} height=${platform.screenHeight}")
                 log(LogType.INFO, "SIM",
@@ -148,6 +154,7 @@ class WatchSimulator(
             isInitialized = false
             scrollPx = 0
             mainHandler.post {
+                if (isCleanedUp) return@post
                 log(LogType.INFO, "SIM",
                     "重新初始化：platform=${platform.displayName} textSize=$textSizeLevel")
                 initialize()
@@ -157,6 +164,7 @@ class WatchSimulator(
 
     /** 釋放所有資源，必須在 Activity/Fragment 銷毀時呼叫 */
     fun cleanup() {
+        isCleanedUp = true   // 阻止仍在執行中的 render 任務之後回呼主執行緒
         stopAutoScroll()
         renderHandler.removeCallbacksAndMessages(null)
         renderThread.quitSafely()
@@ -257,9 +265,11 @@ class WatchSimulator(
         log(LogType.TX, "WATCH→PHONE", "CMD_REQUEST_PAGE | pageNum=$pageNum")
 
         renderHandler.post {
+            if (isCleanedUp) return@post
             val data = r.renderPage(document, pageNum)
             if (data == null) {
                 mainHandler.post {
+                    if (isCleanedUp) return@post
                     log(LogType.ERROR, "SIM", "頁面 $pageNum 渲染失敗")
                 }
                 return@post
@@ -270,6 +280,7 @@ class WatchSimulator(
             val bmp = decode1BitToBitmap(data, platform.screenWidth, platform.screenHeight)
 
             mainHandler.post {
+                if (isCleanedUp) { bmp.recycle(); return@post }
                 log(LogType.RX, "PHONE→WATCH",
                     "CMD_SEND_IMAGE_CHUNK × $chunks | page=$pageNum size=${data.size}B")
                 log(LogType.INFO, "SIM",

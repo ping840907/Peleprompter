@@ -12,7 +12,7 @@
 // ============================================================
 #define KEY_COMMAND        0   // (Int) 指令類型
 #define KEY_SCROLL_SPEED   3   // (Int) 捲動速度 1-6
-#define KEY_TEXT_SIZE      4   // (Int) 文字大小 0=小, 1=中, 2=大
+#define KEY_TEXT_SIZE      4   // (Int) 文字大小 0-4 (TextSizeLevel)
 #define KEY_PAGE_NUM       5   // (Int) 頁碼 (0-indexed)
 #define KEY_CHUNK_INDEX    6   // (Int) 此頁圖片資料的區塊索引
 #define KEY_TOTAL_CHUNKS   7   // (Int) 此頁共幾個區塊
@@ -20,6 +20,7 @@
 #define KEY_TOTAL_PAGES    9   // (Int) 文件總頁數
 #define KEY_WATCH_WIDTH    10  // (Int) 手錶螢幕寬度 (pixels)
 #define KEY_WATCH_HEIGHT   11  // (Int) 手錶螢幕高度 (pixels)
+#define KEY_START_PAGE     12  // (Int) 初始化時的起始頁 (0-indexed)，供書籤續讀
 
 // ============================================================
 // 指令類型
@@ -33,12 +34,14 @@
 // ============================================================
 // 文字大小列舉
 // ============================================================
+// 字型像素大小在 index.js 與 Android WatchImageRenderer.kt 已統一：
+//   Tiny=10, Small=13, Medium=16, Large=22, XLarge=28（行距 1.15）
 typedef enum {
-    TEXT_SIZE_TINY   = 0,   // 9px  (index.js) / 10px (Android) — 細筆畫
-    TEXT_SIZE_SMALL  = 1,   // 11px (index.js) / 13px (Android) — 細筆畫
-    TEXT_SIZE_MEDIUM = 2,   // 14px (index.js) / 16px (Android) — 原 Small
-    TEXT_SIZE_LARGE  = 3,   // 18px (index.js) / 22px (Android) — 原 Medium
-    TEXT_SIZE_XLARGE = 4    // 22px (index.js) / 28px (Android) — 原 Large
+    TEXT_SIZE_TINY   = 0,   // 10px — 細筆畫 (light)
+    TEXT_SIZE_SMALL  = 1,   // 13px — 細筆畫 (light)
+    TEXT_SIZE_MEDIUM = 2,   // 16px — 原 Small (monospace)
+    TEXT_SIZE_LARGE  = 3,   // 22px — 原 Medium (monospace)
+    TEXT_SIZE_XLARGE = 4    // 28px — 原 Large (monospace)
 } TextSizeLevel;
 
 // ============================================================

@@ -18,10 +18,12 @@
  * @param total_pages 文件總頁數
  * @param page_width  頁面寬度 (pixels)
  * @param page_height 頁面高度 (pixels)
+ * @param start_page  起始頁 (0-indexed)，供書籤續讀；無書籤時為 0
  */
 typedef void (*ImagesInitCallback)(int32_t total_pages,
                                     int32_t page_width,
-                                    int32_t page_height);
+                                    int32_t page_height,
+                                    int32_t start_page);
 
 /**
  * 收到圖片資料區塊時的回呼
@@ -82,7 +84,7 @@ void messaging_request_page(int32_t page_num);
 /**
  * 向手機同步目前的設定
  * @param scroll_speed 捲動速度 1-6
- * @param text_size    文字大小 0-2
+ * @param text_size    文字大小 0-4 (TextSizeLevel)
  */
 void messaging_send_settings(int32_t scroll_speed, int32_t text_size);
 

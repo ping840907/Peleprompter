@@ -154,7 +154,8 @@ PageSlot *image_manager_get_slot(ImageManager *mgr, int32_t page_num) {
     return NULL;
 }
 
-PageSlot *image_manager_alloc_slot(ImageManager *mgr, int32_t page_num) {
+PageSlot *image_manager_alloc_slot(ImageManager *mgr, int32_t page_num,
+                                   int32_t protect_lo, int32_t protect_hi) {
     if (mgr->page_data_size <= 0) return NULL;
 
     // 若已有此頁的插槽，直接重用（不重建 GBitmap）
@@ -195,16 +196,28 @@ PageSlot *image_manager_alloc_slot(ImageManager *mgr, int32_t page_num) {
         }
     }
 
-    // 所有插槽已滿：淘汰距 page_num 最遠的頁面，但保留其 GBitmap
-    int evict_idx   = 0;
-    int32_t max_dist = 0;
+    // 所有插槽已滿：淘汰距 page_num 最遠的頁面，但保留其 GBitmap，
+    // 並略過位於 [protect_lo, protect_hi] 範圍內（畫面正在顯示）的頁面。
+    int evict_idx   = -1;
+    int32_t max_dist = -1;
     for (int i = 0; i < MAX_PAGES_CACHED; i++) {
-        int32_t dist = mgr->slots[i].page_num - page_num;
+        int32_t pg = mgr->slots[i].page_num;
+        // 保護目前可見的頁面，避免淘汰造成畫面閃爍
+        if (pg >= protect_lo && pg <= protect_hi) continue;
+        int32_t dist = pg - page_num;
         if (dist < 0) dist = -dist;
         if (dist > max_dist) {
             max_dist  = dist;
             evict_idx = i;
         }
+    }
+
+    if (evict_idx < 0) {
+        // 所有已佔用插槽都受保護，無法騰出空間
+        APP_LOG(APP_LOG_LEVEL_WARNING,
+                "alloc_slot: 無可淘汰插槽（皆為可見頁），略過頁面 %ld 的分配",
+                (long)page_num);
+        return NULL;
     }
 
     APP_LOG(APP_LOG_LEVEL_DEBUG, "淘汰頁面 %ld 以載入頁面 %ld",
@@ -232,8 +245,28 @@ bool image_manager_receive_chunk(ImageManager *mgr,
         return false;
     }
 
-    if (slot->total_chunks == 0) {
-        slot->total_chunks = total_chunks;
+    // 輸入驗證：拒絕不合法的索引／總數，避免後續負偏移造成越界寫入
+    if (chunk_idx < 0 || total_chunks <= 0 || chunk_idx >= total_chunks) {
+        APP_LOG(APP_LOG_LEVEL_ERROR,
+                "頁 %ld 區塊參數不合法 (idx=%ld, total=%ld)，忽略",
+                (long)page_num, (long)chunk_idx, (long)total_chunks);
+        return false;
+    }
+
+    // 區塊 0 視為一次新的傳輸開始（含手錶逾時後手機重送整頁的情況）：
+    // 重置計數，確保重送能正確從頭累積。
+    if (chunk_idx == 0) {
+        slot->chunks_received = 0;
+        slot->total_chunks    = total_chunks;
+    }
+
+    // 透過 ACK 驅動佇列，區塊保證依序抵達；只接受預期的下一個區塊，
+    // 藉此天然地去除重複區塊（重送的舊區塊 idx < 預期）並偵測遺失（idx > 預期）。
+    if (chunk_idx != slot->chunks_received) {
+        APP_LOG(APP_LOG_LEVEL_WARNING,
+                "頁 %ld 區塊順序不符 (收到 %ld，預期 %ld)，忽略",
+                (long)page_num, (long)chunk_idx, (long)slot->chunks_received);
+        return false;
     }
 
     int32_t offset   = chunk_idx * IMAGE_CHUNK_DATA_SIZE;
@@ -253,9 +286,9 @@ bool image_manager_receive_chunk(ImageManager *mgr,
     slot->chunks_received++;
     APP_LOG(APP_LOG_LEVEL_DEBUG,
             "頁 %ld 區塊 %ld/%ld 已收到",
-            (long)page_num, (long)slot->chunks_received, (long)total_chunks);
+            (long)page_num, (long)slot->chunks_received, (long)slot->total_chunks);
 
-    if (slot->chunks_received >= total_chunks) {
+    if (slot->chunks_received >= slot->total_chunks) {
         slot->is_ready   = true;
         slot->is_loading = false;
         APP_LOG(APP_LOG_LEVEL_INFO, "頁 %ld 已完整載入", (long)page_num);

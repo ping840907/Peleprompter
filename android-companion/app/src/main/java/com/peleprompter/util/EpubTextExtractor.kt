@@ -43,10 +43,14 @@ object EpubTextExtractor {
         val sb = StringBuilder()
         for (idref in spine) {
             val rawHref = manifest[idref] ?: continue
-            val href = URLDecoder.decode(rawHref, "UTF-8")
-            // Resolve relative href against the OPF directory
-            val resolved = if (opfDir.isEmpty()) href else "$opfDir/$href"
-            val bytes = entries[resolved] ?: entries[href] ?: continue
+            // 去除錨點片段（#chapter1）後再解碼，避免在 entries map 查無此鍵
+            val href = URLDecoder.decode(rawHref.substringBefore('#'), "UTF-8")
+            // Resolve relative href against the OPF directory，並正規化 ../ 與 ./
+            val resolved = normalizePath(if (opfDir.isEmpty()) href else "$opfDir/$href")
+            val bytes = entries[resolved]
+                ?: entries[href]
+                ?: entries[normalizePath(href)]
+                ?: continue
             val text  = htmlToText(String(bytes, Charsets.UTF_8))
             if (text.isNotBlank()) {
                 sb.append(text)
@@ -55,6 +59,22 @@ object EpubTextExtractor {
         }
 
         return sb.toString().trim()
+    }
+
+    /**
+     * 正規化 ZIP 內部路徑：解析並移除 "." 與 ".." 片段，
+     * 使相對 href（如 "../Text/ch1.xhtml"）能對應到實際的 entry 鍵。
+     */
+    private fun normalizePath(path: String): String {
+        val stack = ArrayList<String>()
+        for (seg in path.split('/')) {
+            when (seg) {
+                "", "." -> {}
+                ".."     -> if (stack.isNotEmpty()) stack.removeAt(stack.size - 1)
+                else     -> stack.add(seg)
+            }
+        }
+        return stack.joinToString("/")
     }
 
     // ── XML parsers ───────────────────────────────────────────────────

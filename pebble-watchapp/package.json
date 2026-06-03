@@ -34,7 +34,8 @@
       "KEY_IMAGE_DATA": 8,
       "KEY_TOTAL_PAGES": 9,
       "KEY_WATCH_WIDTH": 10,
-      "KEY_WATCH_HEIGHT": 11
+      "KEY_WATCH_HEIGHT": 11,
+      "KEY_START_PAGE": 12
     },
     "resources": {
       "media": [

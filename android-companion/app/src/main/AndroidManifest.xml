@@ -17,8 +17,6 @@
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <!-- 讀取 .txt 檔案 -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
@@ -33,7 +31,6 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Peleprompter"
         android:extractNativeLibs="true"
-        android:requestLegacyExternalStorage="true"
         android:enableOnBackInvokedCallback="true">
 
         <activity
@@ -44,11 +41,12 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- 支援 .txt 檔案開啟 -->
+            <!-- 支援 .txt / .epub 檔案開啟 -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
+                <data android:mimeType="application/epub+zip" />
             </intent-filter>
         </activity>
 

@@ -30,6 +30,7 @@ var KEY_IMAGE_DATA       = 8;
 var KEY_TOTAL_PAGES      = 9;
 var KEY_WATCH_WIDTH      = 10;
 var KEY_WATCH_HEIGHT     = 11;
+var KEY_START_PAGE       = 12;
 
 var CMD_REQUEST_TEXT     = 0;
 var CMD_SYNC_SETTINGS    = 2;
@@ -37,8 +38,8 @@ var CMD_INIT_IMAGES      = 3;
 var CMD_REQUEST_PAGE     = 4;
 var CMD_SEND_IMAGE_CHUNK = 5;
 
-// 每個區塊最多傳送位元組數（留出 AppMessage header 空間）
-var IMAGE_CHUNK_DATA_SIZE = 1800;
+// 每個區塊最多傳送位元組數（留出 AppMessage header 空間，與 constants.h 一致）
+var IMAGE_CHUNK_DATA_SIZE = 1900;
 
 // ══════════════════════════════════════════════════════════════════
 // 狀態
@@ -48,8 +49,8 @@ var totalPages       = 0;
 var watchWidth       = 144;
 var watchHeight      = 168;
 var textSize         = 2;    // TEXT_SIZE_MEDIUM（目前設定值）
-var rawText          = '';   // 原始未渲染文字（供重繪使用）
-var rawHpad          = 2;    // 水平內距（與平台有關）
+var rawText          = '';   // 原始未渲染文字（供設定頁預先填入）
+var rawHpad          = 0;    // 水平內距（與平台有關，矩形機種為 0）
 
 // ACK 驅動發送佇列
 var messageQueue = [];
@@ -111,11 +112,21 @@ function handleInitRequest(dict) {
     return;
   }
 
+  // 注意：PebbleKit JS 環境沒有 <canvas>，無法重新渲染頁面。
+  // 實際渲染只發生在設定頁的 WebView 中。因此若手錶要求的 textSize
+  // 與目前頁面渲染時不同，這裡仍回傳既有頁面 —— 要套用新字型大小，
+  // 需重新開啟設定頁渲染，或改用 Android companion app。
+  if (reqSize !== textSize) {
+    console.log('[pkjs] 注意：手錶要求 textSize=' + reqSize +
+                ' 但 pkjs 無法重繪，沿用既有頁面（textSize=' + textSize + '）。');
+  }
+
   var reply = {};
   reply[KEY_COMMAND]     = CMD_INIT_IMAGES;
   reply[KEY_TOTAL_PAGES] = totalPages;
   reply[KEY_WATCH_WIDTH] = watchWidth;
   reply[KEY_WATCH_HEIGHT]= watchHeight;
+  reply[KEY_START_PAGE]  = 0;   // pkjs 不追蹤書籤，一律從第 0 頁開始
   enqueue(reply);
 
   console.log('[pkjs] Sent CMD_INIT_IMAGES: ' + totalPages + ' pages ' +
@@ -141,8 +152,10 @@ function handleSettingsSync(dict) {
     var newSize = parseInt(dict[KEY_TEXT_SIZE]);
     if (newSize !== textSize) {
       textSize = newSize;
-      // 手錶在發送 SYNC_SETTINGS 後會發送 REQUEST_TEXT
-      console.log('[pkjs] Text size setting updated to ' + newSize + '.');
+      // 僅記錄使用者偏好；pkjs 無 canvas 無法重繪，實際以新字型重渲染
+      // 需重新開啟設定頁（或使用 Android companion app）。
+      console.log('[pkjs] Text size preference updated to ' + newSize +
+                  ' (re-open config to re-render at this size).');
     }
   }
 }
@@ -177,6 +190,7 @@ function notifyWatchReady() {
   reply[KEY_TOTAL_PAGES]  = totalPages;
   reply[KEY_WATCH_WIDTH]  = watchWidth;
   reply[KEY_WATCH_HEIGHT] = watchHeight;
+  reply[KEY_START_PAGE]   = 0;   // pkjs 不追蹤書籤，一律從第 0 頁開始
   enqueue(reply);
   console.log('[pkjs] Proactively sent CMD_INIT_IMAGES: ' + totalPages + ' pages');
 }
@@ -184,10 +198,11 @@ function notifyWatchReady() {
 // ══════════════════════════════════════════════════════════════════
 // 輔助：根據螢幕尺寸推算預設水平內距
 // ══════════════════════════════════════════════════════════════════
+// 與 Android WatchImageRenderer.horizontalPadPx 一致，確保兩端分頁相同
 function hpadForDimensions(w, h) {
   if (w === 180 && h === 180) return 20;   // Chalk (Time Round)
   if (w === 260 && h === 260) return 30;   // Gabbro (Time Round 2)
-  return 2;                                // Aplite/Basalt/Emery
+  return 0;                                // Aplite/Basalt/Emery
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -303,9 +318,9 @@ function arrayToBase64(arr) {
       textSize         = meta.textSize    != null ? meta.textSize : 2;
 
       rawText          = localStorage.getItem('pele_text') || '';
-      rawHpad          = parseInt(localStorage.getItem('pele_hpad') || '2');
+      rawHpad          = parseInt(localStorage.getItem('pele_hpad') || '0');
       console.log('[pkjs] Restored ' + totalPages + ' pages from localStorage' +
-                  (rawText ? ' (raw text available for re-render)' : ''));
+                  (rawText ? ' (raw text available for config prefill)' : ''));
     }
   } catch (e) {
     console.log('[pkjs] localStorage restore failed: ' + e);
@@ -366,9 +381,9 @@ function buildConfigHtml() {
     // ── Platform selector ────────────────────────────────────────
     '<label class="label">Platform</label>',
     '<div class="btn-row" id="platRow">',
-    '  <button class="seg-btn active" data-w="144" data-h="168" data-hpad="2"  onclick="setPlatform(this)">Aplite/Basalt<br><span style="color:#888;font-size:10px">Pebble&#xB7;Time</span><br>144&#xD7;168</button>',
+    '  <button class="seg-btn active" data-w="144" data-h="168" data-hpad="0"  onclick="setPlatform(this)">Aplite/Basalt<br><span style="color:#888;font-size:10px">Pebble&#xB7;Time</span><br>144&#xD7;168</button>',
     '  <button class="seg-btn"        data-w="180" data-h="180" data-hpad="20" onclick="setPlatform(this)">Chalk<br><span style="color:#888;font-size:10px">Time Round</span><br>180&#xD7;180</button>',
-    '  <button class="seg-btn"        data-w="200" data-h="228" data-hpad="2"  onclick="setPlatform(this)">Emery<br><span style="color:#888;font-size:10px">Time 2</span><br>200&#xD7;228</button>',
+    '  <button class="seg-btn"        data-w="200" data-h="228" data-hpad="0"  onclick="setPlatform(this)">Emery<br><span style="color:#888;font-size:10px">Time 2</span><br>200&#xD7;228</button>',
     '  <button class="seg-btn"        data-w="260" data-h="260" data-hpad="30" onclick="setPlatform(this)">Gabbro<br><span style="color:#888;font-size:10px">Round 2</span><br>260&#xD7;260</button>',
     '</div>',
 
@@ -399,8 +414,13 @@ function buildConfigHtml() {
 
     // State — injected from pkjs at build time
     'var WW=' + watchWidth + ', WH=' + watchHeight + ', SZ=' + textSize + ', HPAD=' + rawHpad + ';',
-    'var PADDING=50, FONT_PX=[9,11,14,18,22], FONT_WT=[200,300,400,400,400], MAX_PAGES=60;',
+    // 渲染參數須與 Android WatchImageRenderer.kt 一致，確保兩端分頁相同：
+    //   字型像素 [10,13,16,22,28]、行距 1.15、Tiny/Small 用細體、其餘用等寬字。
+    'var PADDING=50, FONT_PX=[10,13,16,22,28], LINE_MULT=1.15, MAX_PAGES=60;',
     'var STORED_TEXT=' + JSON.stringify(rawText) + ';',
+    // 字型字串：Tiny/Small (0/1) 以 sans-serif 細體近似 Android 的 sans-serif-light，
+    // 其餘等級使用等寬字 monospace 對應 Android 的 MONOSPACE。
+    'function fontStr(sz,px){return sz<=1?("300 "+px+"px sans-serif"):(px+"px monospace");}',
 
     // UI helpers
     'function setPlatform(btn) {',
@@ -524,8 +544,8 @@ function buildConfigHtml() {
     '  var canvas=document.getElementById("c");',
     '  canvas.width=WW; canvas.height=WH;',
     '  var ctx=canvas.getContext("2d"), fpx=FONT_PX[SZ];',
-    '  ctx.font=FONT_WT[SZ]+" "+fpx+"px sans-serif";',
-    '  var lines=wrapText(ctx,text,WW-HPAD*2), lh=Math.floor(fpx*1.4);',
+    '  ctx.font=fontStr(SZ,fpx);',
+    '  var lines=wrapText(ctx,text,WW-HPAD*2), lh=Math.floor(fpx*LINE_MULT);',
     '  var n=Math.max(1,Math.ceil((PADDING+lines.length*lh+PADDING)/WH));',
     '  var kb=Math.round(n*Math.ceil(WW/8)*WH/1024);',
     '  document.getElementById("estPages").textContent=n;',
@@ -578,8 +598,8 @@ function buildConfigHtml() {
     '  prog.value=0;',
     '  var canvas=document.getElementById("c");',
     '  canvas.width=WW; canvas.height=WH;',
-    '  var ctx=canvas.getContext("2d"), fpx=FONT_PX[SZ], lh=Math.floor(fpx*1.4);',
-    '  ctx.font=FONT_WT[SZ]+" "+fpx+"px sans-serif";',
+    '  var ctx=canvas.getContext("2d"), fpx=FONT_PX[SZ], lh=Math.floor(fpx*LINE_MULT);',
+    '  ctx.font=fontStr(SZ,fpx);',
     '  var lines=wrapText(ctx,text,WW-HPAD*2);',
     '  var totalH=PADDING+lines.length*lh+PADDING;',
     '  var numPages=Math.max(1,Math.min(MAX_PAGES,Math.ceil(totalH/WH)));',
@@ -591,7 +611,7 @@ function buildConfigHtml() {
     '  function renderNext() {',
     '    if (pageN>=numPages){finish(pagesOut,numPages);return;}',
     '    ctx.fillStyle="#000000"; ctx.fillRect(0,0,WW,WH);',
-    '    ctx.fillStyle="#ffffff"; ctx.font=FONT_WT[SZ]+" "+fpx+"px sans-serif";',
+    '    ctx.fillStyle="#ffffff"; ctx.font=fontStr(SZ,fpx);',
     '    var offsetY=PADDING-pageN*WH;',
     '    for (var li=0;li<lines.length;li++) {',
     '      var y=offsetY+li*lh+fpx;',

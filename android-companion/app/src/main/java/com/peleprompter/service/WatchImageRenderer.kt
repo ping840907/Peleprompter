@@ -115,6 +115,35 @@ class WatchImageRenderer(
     }
 
     /**
+     * 將字元偏移量（書籤）換算成所在的頁碼（0-indexed）。
+     * 以實際排版的像素位置計算，與分頁邏輯一致。
+     */
+    fun pageForCharOffset(doc: TextDocument, charOffset: Int): Int {
+        if (charOffset <= 0) return 0
+        val layout = getOrBuildLayout(doc.content)
+        val safeOffset = charOffset.coerceIn(0, doc.content.length)
+        val line = layout.getLineForOffset(safeOffset)
+        val textTop = layout.getLineTop(line)
+        val virtualY = EXTRA_PADDING_PX + textTop
+        val total = computeTotalPages(doc)
+        return (virtualY / watchHeight).coerceIn(0, (total - 1).coerceAtLeast(0))
+    }
+
+    /**
+     * 將頁碼（0-indexed）換算回對應的字元偏移量。
+     * 取該頁頂端所對齊行的起始字元，作為書籤儲存值。
+     */
+    fun charOffsetForPage(doc: TextDocument, pageNum: Int): Int {
+        if (pageNum <= 0) return 0
+        val layout = getOrBuildLayout(doc.content)
+        // 該頁在虛擬卷軸的起始 y → 扣除頭部留白得到文字座標
+        val textY = (pageNum.toLong() * watchHeight - EXTRA_PADDING_PX)
+            .coerceAtLeast(0L).toInt()
+        val line = layout.getLineForVertical(textY)
+        return layout.getLineStart(line).coerceIn(0, doc.content.length)
+    }
+
+    /**
      * 渲染指定頁面並回傳 Pebble 1-bit 格式的位元組陣列。
      *
      * 演算法：

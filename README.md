@@ -83,7 +83,7 @@ Phone                                    Watch
 |----------|----|-----------|---------|
 | `CMD_REQUEST_TEXT` | 0 | Watch → Phone | Screen width/height, text size level |
 | `CMD_SYNC_SETTINGS` | 2 | Both | Scroll speed, text size level |
-| `CMD_INIT_IMAGES` | 3 | Phone → Watch | Total pages, render width/height |
+| `CMD_INIT_IMAGES` | 3 | Phone → Watch | Total pages, render width/height, start page |
 | `CMD_REQUEST_PAGE` | 4 | Watch → Phone | Page number |
 | `CMD_SEND_IMAGE_CHUNK` | 5 | Phone → Watch | Chunk index, total chunks, raw bytes |
 
@@ -99,20 +99,21 @@ Phone                                    Watch
 | `KEY_TOTAL_PAGES` | 9 | Total rendered pages |
 | `KEY_WATCH_WIDTH` | 10 | Watch screen width (px) |
 | `KEY_WATCH_HEIGHT` | 11 | Watch screen height (px) |
+| `KEY_START_PAGE` | 12 | Initial page to display (0-based), for bookmark resume |
 
 Messages are sent through an **ACK-driven queue**: the next message is only dispatched after the previous one is acknowledged, preventing watch inbox overflow.
 
 ### Text Size Levels
 
-Five levels are supported. Levels 0 and 1 use a light typeface for thinner strokes on the 1-bit display.
+Five levels are supported. Levels 0 and 1 use a light typeface for thinner strokes on the 1-bit display. The pixel sizes, line spacing (×1.15) and typefaces are **unified across `index.js` and Android** so both renderers paginate identically.
 
-| Level | Name | index.js (px) | Android (px) | Typeface |
-|-------|------|--------------|--------------|---------|
-| 0 | Tiny | 9 | 10 | `sans-serif-light` / weight 200 |
-| 1 | Small | 11 | 13 | `sans-serif-light` / weight 300 |
-| 2 | Medium | 14 | 16 | `MONOSPACE` / weight 400 |
-| 3 | Large | 18 | 22 | `MONOSPACE` / weight 400 |
-| 4 | XLarge | 22 | 28 | `MONOSPACE` / weight 400 |
+| Level | Name | Size (px) | Typeface |
+|-------|------|-----------|---------|
+| 0 | Tiny | 10 | light (`sans-serif-light` / weight 300) |
+| 1 | Small | 13 | light (`sans-serif-light` / weight 300) |
+| 2 | Medium | 16 | `MONOSPACE` |
+| 3 | Large | 22 | `MONOSPACE` |
+| 4 | XLarge | 28 | `MONOSPACE` |
 
 > **Migration note:** Saved settings from the previous 3-level system (0 = Small, 1 = Medium, 2 = Large) are automatically shifted +2 on first launch so visual size is preserved.
 

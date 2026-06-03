@@ -61,9 +61,17 @@ PageSlot *image_manager_get_slot(ImageManager *mgr, int32_t page_num);
 
 /**
  * 為指定頁碼分配插槽（淘汰最遠的舊頁以騰出空間）
+ *
+ * 淘汰時會略過位於 [protect_lo, protect_hi] 範圍內的頁面，
+ * 避免把正在畫面上顯示的頁面踢出快取造成閃爍。
+ * 若無空插槽且所有已佔用插槽都在保護範圍內，回傳 NULL。
+ *
+ * @param protect_lo 受保護頁碼下界（含），傳負值代表不保護
+ * @param protect_hi 受保護頁碼上界（含）
  * @return 已清空、可接收資料的插槽指標；失敗回傳 NULL
  */
-PageSlot *image_manager_alloc_slot(ImageManager *mgr, int32_t page_num);
+PageSlot *image_manager_alloc_slot(ImageManager *mgr, int32_t page_num,
+                                   int32_t protect_lo, int32_t protect_hi);
 
 /**
  * 接收一個圖片資料區塊並寫入對應插槽
