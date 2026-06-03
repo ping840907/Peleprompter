@@ -48,7 +48,7 @@ class WatchEmulatorActivity : AppCompatActivity() {
         // 支援返回鍵
         supportActionBar?.apply {
             setDisplayHomeAsUpEnabled(true)
-            title = "Watch Emulator"
+            title = "Preview on phone"
         }
 
         setupLog()
@@ -218,6 +218,6 @@ class WatchEmulatorActivity : AppCompatActivity() {
 
     private fun updateSelectButtonLabel() {
         val autoOn = simulator?.isAutoScrollActive ?: false
-        binding.btnSelect.text = if (autoOn) "SELECT\n(stop)" else "SELECT\n(auto)"
+        binding.btnSelect.text = if (autoOn) "❚❚\nStop" else "▶\nAuto"
     }
 }

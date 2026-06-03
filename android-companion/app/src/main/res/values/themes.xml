@@ -1,19 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.Peleprompter" parent="Theme.Material3.Dark.NoActionBar">
-        <item name="colorPrimary">#BB86FC</item>
+        <item name="colorPrimary">@color/primary</item>
         <item name="colorPrimaryVariant">#3700B3</item>
-        <item name="colorSecondary">#03DAC5</item>
-        <item name="colorSecondaryVariant">#018786</item>
-        <item name="android:colorBackground">#121212</item>
-        <item name="colorSurface">#1E1E1E</item>
-        <item name="colorError">#CF6679</item>
+        <item name="colorSecondary">@color/accent</item>
+        <item name="colorSecondaryVariant">@color/accent_dim</item>
+        <item name="android:colorBackground">@color/bg</item>
+        <item name="colorSurface">@color/surface</item>
+        <item name="colorError">@color/danger</item>
         <item name="colorOnPrimary">#000000</item>
         <item name="colorOnSecondary">#000000</item>
-        <item name="colorOnBackground">#FFFFFF</item>
-        <item name="colorOnSurface">#FFFFFF</item>
+        <item name="colorOnBackground">@color/text_primary</item>
+        <item name="colorOnSurface">@color/text_primary</item>
         <item name="colorOnError">#000000</item>
-        <item name="android:statusBarColor">#121212</item>
-        <item name="android:navigationBarColor">#121212</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+    </style>
+
+    <!-- Uppercase, letter-spaced section header used on the main screen cards -->
+    <style name="SectionLabel">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/text_tertiary</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.08</item>
+        <item name="android:layout_marginBottom">14dp</item>
     </style>
 </resources>

@@ -154,34 +154,35 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnScrollUp"
-                        android:layout_width="44dp"
-                        android:layout_height="44dp"
+                        android:layout_width="46dp"
+                        android:layout_height="46dp"
                         android:text="▲"
                         android:textSize="14sp"
-                        android:layout_marginBottom="6dp"
-                        app:backgroundTint="#333333"
-                        android:textColor="#FFFFFF"
+                        android:layout_marginBottom="8dp"
+                        app:backgroundTint="@color/surface_elevated"
+                        android:textColor="@color/text_primary"
                         style="@style/Widget.Material3.Button.IconButton" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnSelect"
-                        android:layout_width="44dp"
-                        android:layout_height="44dp"
-                        android:text="SELECT&#10;(auto)"
-                        android:textSize="8sp"
-                        android:layout_marginBottom="6dp"
-                        app:backgroundTint="#555555"
-                        android:textColor="#FFFFFF"
+                        android:layout_width="46dp"
+                        android:layout_height="46dp"
+                        android:text="▶&#10;Auto"
+                        android:textSize="9sp"
+                        android:lineSpacingExtra="1dp"
+                        android:layout_marginBottom="8dp"
+                        app:backgroundTint="@color/primary"
+                        android:textColor="#000000"
                         style="@style/Widget.Material3.Button.IconButton" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnScrollDown"
-                        android:layout_width="44dp"
-                        android:layout_height="44dp"
+                        android:layout_width="46dp"
+                        android:layout_height="46dp"
                         android:text="▼"
                         android:textSize="14sp"
-                        app:backgroundTint="#333333"
-                        android:textColor="#FFFFFF"
+                        app:backgroundTint="@color/surface_elevated"
+                        android:textColor="@color/text_primary"
                         style="@style/Widget.Material3.Button.IconButton" />
                 </LinearLayout>
             </LinearLayout>

@@ -206,33 +206,19 @@ class MainActivity : AppCompatActivity() {
             updateSourceBadge(sourceType)
         }
 
-        // 文件載入 → 更新「Send to Watch」卡片
+        // 文件載入 → 啟用「Send to Watch」按鈕並更新提示
         viewModel.currentDocument.observe(this) { doc ->
-            if (doc != null) {
-                val icon = when (viewModel.sourceType.value) {
-                    MainViewModel.SourceType.FILE  -> "📄"
-                    MainViewModel.SourceType.PASTE -> "📋"
-                    else                           -> "📋"
-                }
-                binding.tvDocTitle.text = "$icon  ${doc.title}"
-                binding.tvDocTitle.setTextColor(0xFFFFFFFF.toInt())
-                binding.tvDocTitle.setTypeface(null, Typeface.BOLD)
-                binding.tvDocInfo.text = "${doc.totalLength} characters"
-                binding.tvDocInfo.visibility = View.VISIBLE
+            val loaded = doc != null
+            binding.btnPushFromStart.isEnabled = loaded
+            binding.btnPushResume.isEnabled = loaded && doc!!.hasBookmark
+            binding.btnPushResume.text = getString(R.string.btn_resume)
 
-                binding.btnPushFromStart.isEnabled = true
-                binding.btnPushResume.isEnabled = doc.hasBookmark
-                binding.btnPushResume.text = if (doc.hasBookmark)
-                    "Resume (${doc.bookmarkOffset})" else "Resume"
+            if (loaded) {
+                binding.tvSendHint.text = "“${doc!!.title}”  ·  ${doc.totalLength} characters"
+                binding.tvSendHint.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
             } else {
-                // 無稿件狀態
-                binding.tvDocTitle.text = "No script loaded — select one above"
-                binding.tvDocTitle.setTextColor(0xFF555555.toInt())
-                binding.tvDocTitle.setTypeface(null, Typeface.ITALIC)
-                binding.tvDocInfo.visibility = View.GONE
-                binding.btnPushFromStart.isEnabled = false
-                binding.btnPushResume.isEnabled = false
-                binding.btnPushResume.text = "Resume"
+                binding.tvSendHint.text = getString(R.string.send_hint_disabled)
+                binding.tvSendHint.setTextColor(ContextCompat.getColor(this, R.color.text_tertiary))
             }
         }
 
@@ -242,9 +228,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         viewModel.watchConnected.observe(this) { connected ->
-            binding.tvConnectionStatus.text = if (connected) "Connected" else "Disconnected"
+            binding.tvConnectionStatus.text =
+                if (connected) "● ${getString(R.string.status_connected)}"
+                else "● ${getString(R.string.status_disconnected)}"
             binding.tvConnectionStatus.setTextColor(
-                if (connected) 0xFF03DAC5.toInt() else 0xFFFF5252.toInt()
+                ContextCompat.getColor(this, if (connected) R.color.success else R.color.danger)
             )
         }
 
@@ -262,9 +250,9 @@ class MainActivity : AppCompatActivity() {
             binding.toggleTextSize.check(sizeButtonId)
         }
 
-        viewModel.bookmarkOffset.observe(this) { offset ->
+        viewModel.bookmarkOffset.observe(this) { _ ->
+            // 手錶回報閱讀進度後即可使用「Resume」（不顯示原始位移數字，避免誤會）
             binding.btnPushResume.isEnabled = true
-            binding.btnPushResume.text = "Resume ($offset)"
         }
 
         viewModel.statusMessage.observe(this) { msg ->

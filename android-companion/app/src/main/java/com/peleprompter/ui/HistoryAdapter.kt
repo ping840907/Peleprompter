@@ -49,7 +49,7 @@ class HistoryAdapter(
 
         if (entry.bookmarkOffset > 0) {
             holder.tvBookmark.visibility = View.VISIBLE
-            holder.tvBookmark.text = "Bookmark at offset ${entry.bookmarkOffset}"
+            holder.tvBookmark.text = "● In progress"
         } else {
             holder.tvBookmark.visibility = View.GONE
         }

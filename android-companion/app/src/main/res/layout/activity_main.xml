@@ -4,17 +4,18 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#121212">
+    android:background="@color/bg">
 
-    <!-- 頂部標題與連線狀態 -->
+    <!-- ══════════ App bar ══════════ -->
     <LinearLayout
         android:id="@+id/headerLayout"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:padding="16dp"
-        android:background="#1E1E1E"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="16dp"
+        android:background="@color/bg"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
@@ -24,33 +25,38 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="Peleprompter"
-            android:textColor="#FFFFFF"
-            android:textSize="20sp"
-            android:textStyle="bold" />
+            android:textColor="@color/text_primary"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:letterSpacing="-0.01" />
 
         <TextView
             android:id="@+id/tvConnectionStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Disconnected"
-            android:textColor="#FF5252"
-            android:textSize="12sp"
-            android:layout_marginEnd="8dp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnOpenEmulator"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Emulator"
+            android:background="@drawable/bg_pill"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="6dp"
+            android:text="● Not connected"
+            android:textColor="@color/danger"
             android:textSize="11sp"
-            android:textColor="#BB86FC"
-            style="@style/Widget.Material3.Button.TextButton" />
+            android:textStyle="bold" />
     </LinearLayout>
+
+    <View
+        android:id="@+id/headerDivider"
+        android:layout_width="0dp"
+        android:layout_height="1dp"
+        android:background="@color/stroke"
+        app:layout_constraintTop_toBottomOf="@id/headerLayout"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
     <ScrollView
         android:layout_width="0dp"
         android:layout_height="0dp"
-        app:layout_constraintTop_toBottomOf="@id/headerLayout"
+        android:fillViewport="true"
+        app:layout_constraintTop_toBottomOf="@id/headerDivider"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
@@ -61,31 +67,28 @@
             android:orientation="vertical"
             android:padding="16dp">
 
-            <!-- ① 稿件來源卡片 -->
+            <!-- ══════════ ① Script ══════════ -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                app:cardBackgroundColor="#1E1E1E"
-                app:cardCornerRadius="12dp"
-                app:strokeColor="#333333"
+                android:layout_marginBottom="14dp"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/stroke"
                 app:strokeWidth="1dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="16dp">
+                    android:padding="18dp">
 
                     <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Script"
-                        android:textColor="#B0B0B0"
-                        android:textSize="14sp"
-                        android:layout_marginBottom="10dp" />
+                        style="@style/SectionLabel"
+                        android:text="@string/section_script" />
 
-                    <!-- 來源狀態列（常顯示） -->
+                    <!-- Source badge -->
                     <LinearLayout
                         android:id="@+id/layoutSourceBadge"
                         android:layout_width="match_parent"
@@ -93,18 +96,18 @@
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
                         android:background="@drawable/source_badge_empty"
-                        android:paddingStart="12dp"
+                        android:paddingStart="14dp"
                         android:paddingEnd="4dp"
-                        android:paddingTop="8dp"
-                        android:paddingBottom="8dp"
-                        android:layout_marginBottom="10dp">
+                        android:paddingTop="10dp"
+                        android:paddingBottom="10dp"
+                        android:layout_marginBottom="14dp">
 
                         <TextView
                             android:id="@+id/tvSourceIcon"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:textSize="20sp"
-                            android:layout_marginEnd="10dp" />
+                            android:layout_marginEnd="12dp" />
 
                         <LinearLayout
                             android:layout_width="0dp"
@@ -116,9 +119,9 @@
                                 android:id="@+id/tvSourceName"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="No script loaded"
-                                android:textColor="#555555"
-                                android:textSize="13sp"
+                                android:text="@string/source_empty"
+                                android:textColor="@color/text_disabled"
+                                android:textSize="14sp"
                                 android:textStyle="italic" />
 
                             <TextView
@@ -126,9 +129,9 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:visibility="gone"
-                                android:textColor="#546E7A"
-                                android:textSize="11sp"
-                                android:layout_marginTop="1dp" />
+                                android:textColor="@color/text_tertiary"
+                                android:textSize="12sp"
+                                android:layout_marginTop="2dp" />
                         </LinearLayout>
 
                         <com.google.android.material.button.MaterialButton
@@ -137,104 +140,33 @@
                             android:layout_height="wrap_content"
                             android:text="✕"
                             android:visibility="gone"
-                            android:textColor="#666666"
+                            android:textColor="@color/text_tertiary"
+                            android:textSize="15sp"
                             android:minWidth="0dp"
-                            android:paddingStart="8dp"
-                            android:paddingEnd="8dp"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:paddingStart="10dp"
+                            android:paddingEnd="10dp"
                             style="@style/Widget.Material3.Button.TextButton" />
                     </LinearLayout>
 
-                    <!-- 貼上文字區 -->
+                    <!-- Paste area -->
                     <EditText
                         android:id="@+id/etTextContent"
                         android:layout_width="match_parent"
-                        android:layout_height="140dp"
+                        android:layout_height="148dp"
                         android:gravity="top|start"
-                        android:hint="Paste script here..."
-                        android:textColor="#FFFFFF"
-                        android:textColorHint="#555555"
+                        android:hint="@string/hint_paste"
+                        android:textColor="@color/text_primary"
+                        android:textColorHint="@color/text_disabled"
                         android:background="@drawable/edit_text_bg"
-                        android:padding="12dp"
+                        android:padding="14dp"
                         android:textSize="14sp"
-                        android:inputType="textMultiLine" />
+                        android:lineSpacingMultiplier="1.2"
+                        android:inputType="textMultiLine"
+                        android:importantForAutofill="no" />
 
-                    <!-- 操作按鈕列 -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginTop="10dp">
-
-                        <!-- 匯入檔案（主要替代方式） -->
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnImportFile"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="Import .txt File"
-                            android:layout_marginEnd="4dp"
-                            android:textColor="#BB86FC"
-                            style="@style/Widget.Material3.Button.OutlinedButton" />
-
-                        <!-- 使用貼上的文字（僅當 EditText 有內容時啟用） -->
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnLoadText"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="Use Pasted Text"
-                            android:layout_marginStart="4dp"
-                            android:enabled="false"
-                            app:backgroundTint="#BB86FC" />
-                    </LinearLayout>
-
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- ② 傳送到手錶卡片（常顯示，無稿件時停用） -->
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/cardDocInfo"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                app:cardBackgroundColor="#1E1E1E"
-                app:cardCornerRadius="12dp"
-                app:strokeColor="#333333"
-                app:strokeWidth="1dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Send to Watch"
-                        android:textColor="#B0B0B0"
-                        android:textSize="14sp"
-                        android:layout_marginBottom="8dp" />
-
-                    <!-- 目前載入的稿件資訊（來源 + 字數） -->
-                    <TextView
-                        android:id="@+id/tvDocTitle"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="No script loaded — select one above"
-                        android:textColor="#555555"
-                        android:textSize="14sp"
-                        android:textStyle="italic" />
-
-                    <TextView
-                        android:id="@+id/tvDocInfo"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:visibility="gone"
-                        android:textColor="#888888"
-                        android:textSize="12sp"
-                        android:layout_marginTop="2dp" />
-
+                    <!-- Actions -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -242,75 +174,182 @@
                         android:layout_marginTop="12dp">
 
                         <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnPushFromStart"
+                            android:id="@+id/btnImportFile"
                             android:layout_width="0dp"
-                            android:layout_height="wrap_content"
+                            android:layout_height="48dp"
                             android:layout_weight="1"
-                            android:text="From Beginning"
-                            android:layout_marginEnd="4dp"
-                            android:enabled="false"
-                            app:backgroundTint="#03DAC5"
-                            android:textColor="#000000" />
+                            android:text="@string/btn_import"
+                            app:icon="@android:drawable/ic_menu_upload"
+                            app:iconGravity="textStart"
+                            app:iconTint="@color/primary"
+                            android:layout_marginEnd="5dp"
+                            android:textColor="@color/primary"
+                            app:strokeColor="@color/primary"
+                            style="@style/Widget.Material3.Button.OutlinedButton" />
 
                         <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnPushResume"
+                            android:id="@+id/btnLoadText"
                             android:layout_width="0dp"
-                            android:layout_height="wrap_content"
+                            android:layout_height="48dp"
                             android:layout_weight="1"
-                            android:text="Resume"
-                            android:layout_marginStart="4dp"
+                            android:text="@string/btn_use_text"
+                            android:layout_marginStart="5dp"
                             android:enabled="false"
-                            android:textColor="#03DAC5"
-                            style="@style/Widget.Material3.Button.OutlinedButton" />
+                            android:textColor="#000000"
+                            app:backgroundTint="@color/primary" />
                     </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/import_formats"
+                        android:textColor="@color/text_tertiary"
+                        android:textSize="11sp"
+                        android:gravity="center"
+                        android:layout_marginTop="8dp" />
 
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- 遠端控制 -->
+            <!-- ══════════ ② Send to Watch ══════════ -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardDocInfo"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                app:cardBackgroundColor="#1E1E1E"
-                app:cardCornerRadius="12dp"
-                app:strokeColor="#333333"
+                android:layout_marginBottom="14dp"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/stroke"
                 app:strokeWidth="1dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="16dp">
+                    android:padding="18dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            style="@style/SectionLabel"
+                            android:layout_marginBottom="0dp"
+                            android:text="@string/section_send" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnOpenEmulator"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/btn_preview"
+                            android:textSize="12sp"
+                            android:minHeight="0dp"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            app:icon="@android:drawable/ic_menu_view"
+                            app:iconSize="16dp"
+                            app:iconTint="@color/primary"
+                            android:textColor="@color/primary"
+                            style="@style/Widget.Material3.Button.TextButton" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvSendHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/send_hint_disabled"
+                        android:textColor="@color/text_tertiary"
+                        android:textSize="13sp"
+                        android:layout_marginTop="2dp"
+                        android:layout_marginBottom="14dp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnPushFromStart"
+                            android:layout_width="0dp"
+                            android:layout_height="50dp"
+                            android:layout_weight="1"
+                            android:text="@string/btn_from_beginning"
+                            android:layout_marginEnd="5dp"
+                            android:enabled="false"
+                            app:backgroundTint="@color/accent"
+                            android:textColor="#000000" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnPushResume"
+                            android:layout_width="0dp"
+                            android:layout_height="50dp"
+                            android:layout_weight="1"
+                            android:text="@string/btn_resume"
+                            android:layout_marginStart="5dp"
+                            android:enabled="false"
+                            android:textColor="@color/accent"
+                            app:strokeColor="@color/accent"
+                            style="@style/Widget.Material3.Button.OutlinedButton" />
+                    </LinearLayout>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- ══════════ ③ Remote Control ══════════ -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="14dp"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/stroke"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="18dp">
+
+                    <TextView
+                        style="@style/SectionLabel"
+                        android:layout_marginBottom="2dp"
+                        android:text="@string/section_remote" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/remote_hint"
+                        android:textColor="@color/text_tertiary"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="14dp" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Remote Control"
-                        android:textColor="#B0B0B0"
-                        android:textSize="14sp"
-                        android:layout_marginBottom="12dp" />
-
-                    <!-- 捲動速度 -->
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Scroll Speed"
-                        android:textColor="#FFFFFF"
+                        android:text="@string/label_speed"
+                        android:textColor="@color/text_primary"
                         android:textSize="14sp" />
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:gravity="center_vertical"
-                        android:layout_marginTop="4dp">
+                        android:layout_marginTop="2dp">
 
                         <TextView
                             android:id="@+id/tvSpeedValue"
-                            android:layout_width="32dp"
+                            android:layout_width="34dp"
                             android:layout_height="wrap_content"
                             android:text="3"
-                            android:textColor="#BB86FC"
+                            android:textColor="@color/primary"
                             android:textSize="18sp"
                             android:textStyle="bold" />
 
@@ -323,24 +362,24 @@
                             android:valueTo="6"
                             android:stepSize="1"
                             android:value="3"
-                            app:trackColorActive="#BB86FC"
-                            app:thumbColor="#BB86FC" />
+                            app:trackColorActive="@color/primary"
+                            app:trackColorInactive="@color/stroke_strong"
+                            app:thumbColor="@color/primary" />
                     </LinearLayout>
 
-                    <!-- 文字大小 -->
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Text Size"
-                        android:textColor="#FFFFFF"
+                        android:text="@string/label_size"
+                        android:textColor="@color/text_primary"
                         android:textSize="14sp"
-                        android:layout_marginTop="8dp" />
+                        android:layout_marginTop="10dp" />
 
                     <com.google.android.material.button.MaterialButtonToggleGroup
                         android:id="@+id/toggleTextSize"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
+                        android:layout_marginTop="6dp"
                         app:singleSelection="true"
                         app:selectionRequired="true">
 
@@ -351,7 +390,7 @@
                             android:layout_weight="1"
                             android:text="Tiny"
                             style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:textColor="#FFFFFF"
+                            android:textColor="@color/text_primary"
                             android:textSize="11sp" />
 
                         <com.google.android.material.button.MaterialButton
@@ -361,7 +400,7 @@
                             android:layout_weight="1"
                             android:text="Small"
                             style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:textColor="#FFFFFF"
+                            android:textColor="@color/text_primary"
                             android:textSize="11sp" />
 
                         <com.google.android.material.button.MaterialButton
@@ -371,7 +410,7 @@
                             android:layout_weight="1"
                             android:text="Medium"
                             style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:textColor="#FFFFFF"
+                            android:textColor="@color/text_primary"
                             android:textSize="11sp" />
 
                         <com.google.android.material.button.MaterialButton
@@ -381,7 +420,7 @@
                             android:layout_weight="1"
                             android:text="Large"
                             style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:textColor="#FFFFFF"
+                            android:textColor="@color/text_primary"
                             android:textSize="11sp" />
 
                         <com.google.android.material.button.MaterialButton
@@ -391,36 +430,33 @@
                             android:layout_weight="1"
                             android:text="XLarge"
                             style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:textColor="#FFFFFF"
+                            android:textColor="@color/text_primary"
                             android:textSize="11sp" />
                     </com.google.android.material.button.MaterialButtonToggleGroup>
 
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- 匯入歷史 -->
+            <!-- ══════════ ④ History ══════════ -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardBackgroundColor="#1E1E1E"
-                app:cardCornerRadius="12dp"
-                app:strokeColor="#333333"
+                android:layout_marginBottom="12dp"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/stroke"
                 app:strokeWidth="1dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="16dp">
+                    android:padding="18dp">
 
                     <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Import History"
-                        android:textColor="#B0B0B0"
-                        android:textSize="14sp"
-                        android:layout_marginBottom="8dp" />
+                        style="@style/SectionLabel"
+                        android:text="@string/section_history" />
 
                     <androidx.recyclerview.widget.RecyclerView
                         android:id="@+id/rvHistory"
@@ -432,22 +468,21 @@
                         android:id="@+id/tvNoHistory"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="No import history yet"
-                        android:textColor="#555555"
+                        android:text="@string/history_empty"
+                        android:textColor="@color/text_disabled"
                         android:textSize="13sp"
                         android:gravity="center"
-                        android:padding="16dp" />
+                        android:padding="20dp" />
 
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- 狀態列 -->
             <TextView
                 android:id="@+id/tvStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Ready"
-                android:textColor="#666666"
+                android:text="@string/status_ready"
+                android:textColor="@color/text_tertiary"
                 android:textSize="12sp"
                 android:gravity="center"
                 android:padding="8dp" />

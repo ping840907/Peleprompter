@@ -1,4 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Peleprompter</string>
+
+    <!-- Sections -->
+    <string name="section_script">SCRIPT</string>
+    <string name="section_send">SEND TO WATCH</string>
+    <string name="section_remote">REMOTE CONTROL</string>
+    <string name="section_history">HISTORY</string>
+
+    <!-- Script card -->
+    <string name="hint_paste">Paste your script here, or import a file…</string>
+    <string name="btn_import">Import file</string>
+    <string name="btn_use_text">Use this text</string>
+    <string name="source_empty">No script loaded</string>
+    <string name="import_formats">.txt &amp; .epub supported</string>
+
+    <!-- Send card -->
+    <string name="send_hint_disabled">Load a script above to send it to your watch.</string>
+    <string name="btn_from_beginning">From beginning</string>
+    <string name="btn_resume">Resume</string>
+
+    <!-- Remote control -->
+    <string name="remote_hint">Adjusts the watch live while it is running.</string>
+    <string name="label_speed">Scroll speed</string>
+    <string name="label_size">Text size</string>
+
+    <!-- History -->
+    <string name="history_empty">Imported scripts will appear here</string>
+    <string name="history_in_progress">In progress</string>
+
+    <!-- Misc -->
+    <string name="status_connected">Connected</string>
+    <string name="status_disconnected">Not connected</string>
+    <string name="btn_preview">Preview</string>
+    <string name="status_ready">Ready</string>
 </resources>

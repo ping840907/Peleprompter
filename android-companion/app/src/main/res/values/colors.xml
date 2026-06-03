@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Surfaces -->
+    <color name="bg">#121212</color>
+    <color name="surface">#1C1C1E</color>
+    <color name="surface_elevated">#262628</color>
+    <color name="input_bg">#2A2A2C</color>
+    <color name="stroke">#323234</color>
+    <color name="stroke_strong">#404044</color>
+
+    <!-- Accents -->
+    <color name="primary">#BB86FC</color>
+    <color name="primary_dim">#9A6BE0</color>
+    <color name="accent">#03DAC5</color>
+    <color name="accent_dim">#02B5A4</color>
+
+    <!-- Text -->
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#B6B6BC</color>
+    <color name="text_tertiary">#8A8A90</color>
+    <color name="text_disabled">#5A5A60</color>
+
+    <!-- Status -->
+    <color name="danger">#FF6E6E</color>
+    <color name="success">#03DAC5</color>
+
+    <!-- Loaded-source badge -->
+    <color name="badge_loaded_bg">#1B2230</color>
+    <color name="badge_loaded_stroke">#274063</color>
+    <color name="info_accent">#90CAF9</color>
+</resources>
