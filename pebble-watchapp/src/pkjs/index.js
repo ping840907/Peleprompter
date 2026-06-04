@@ -557,17 +557,18 @@ function buildConfigHtml() {
     '  renderNext();',
     '}',
 
-    // Send result back to PebbleKit JS
+    // Send result back to PebbleKit JS.
+    // 注意：不再把整份原始文字 (text) 放進回傳 payload，只送渲染後的頁面，
+    // 大幅縮小 pebblejs://close 的資料量，避免大稿件被截斷導致手錶收不到頁面。
     'function finish(pagesOut,n) {',
-    '  var text=document.getElementById("txt").value.trim();',
-    '  setStatus("Done! "+n+(n>1?" pages":" page")+" rendered. Connecting...","ok");',
-    '  var result={pages:pagesOut,totalPages:n,watchWidth:WW,watchHeight:WH,textSize:SZ,text:text,hpad:HPAD};',
-    '  try {',
-    '    document.location="pebblejs://close#"+encodeURIComponent(JSON.stringify(result));',
-    '  } catch(e) {',
-    '    setStatus("Error: "+e.message,"error");',
-    '    document.getElementById("btnRender").disabled=false;',
-    '  }',
+    '  var bytes0 = pagesOut.length ? atob(pagesOut[0]).length : 0;',
+    '  setStatus("Rendered "+n+" page(s); first page = "+bytes0+" bytes. Preview shown above. Sending to watch\\u2026","ok");',
+    '  var result={pages:pagesOut,totalPages:n,watchWidth:WW,watchHeight:WH,textSize:SZ,hpad:HPAD};',
+    // 延遲關閉，讓使用者能看到上方預覽與位元組數（便於診斷）
+    '  setTimeout(function(){',
+    '    try { document.location="pebblejs://close#"+encodeURIComponent(JSON.stringify(result)); }',
+    '    catch(e){ setStatus("Error: "+e.message,"error"); document.getElementById("btnRender").disabled=false; }',
+    '  }, 1800);',
     '}',
 
     // Page init: auto-select the correct platform + size buttons, pre-fill stored text
