@@ -75,5 +75,7 @@ data class ImportHistoryEntry(
     val bookmarkOffset: Int,
     val importedAt: Long,
     val sourcePath: String?,
-    val contentPreview: String       // 前 100 字元預覽
+    val contentPreview: String,      // 前 100 字元預覽
+    // 來源類型："PASTE" 或 "FILE"。可為 null（舊資料），視為 "FILE"。
+    val sourceType: String? = "FILE"
 )

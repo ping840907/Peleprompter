@@ -73,6 +73,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _watchSettings.value = rawSettings
         refreshHistory()
 
+        // 啟動時自動還原上次載入的稿件（從內部儲存讀回，不依賴 SAF 權限）
+        restoreLastDocument()
+
         // 設定通訊回呼
         commManager.onBookmarkUpdated = { offset ->
             _bookmarkOffset.postValue(offset)
@@ -100,7 +103,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             // 檔案寫入與歷史儲存移至背景執行緒，避免阻塞 UI（ANR）
-            val savedUri = withContext(Dispatchers.IO) { savePastedTextToInternal(docId, text) }
+            val savedUri = withContext(Dispatchers.IO) { saveTextToInternal(docId, text) }
 
             val doc = TextDocument(
                 id = docId,
@@ -110,31 +113,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             _sourceType.value = SourceType.PASTE
             setDocument(doc)
-
-            // 儲存匯入歷史
-            val preview = text.take(100).replace("\n", " ")
-            val entry = ImportHistoryEntry(
-                id = docId,
-                title = title,
-                bookmarkOffset = 0,
-                importedAt = System.currentTimeMillis(),
-                sourcePath = savedUri,
-                contentPreview = preview
-            )
-            withContext(Dispatchers.IO) { prefs.saveImportHistoryEntry(entry) }
-            refreshHistory()
+            saveHistoryEntry(docId, title, savedUri, text, "PASTE")
         }
     }
 
     /**
-     * 將貼上的文字存入 app 內部檔案
-     * @return 檔案的 URI 字串，供日後 reloadFromHistory 使用
+     * 將稿件文字（貼上或匯入後的純文字）存入 app 內部檔案。
+     * 所有來源都複製到內部儲存，重新載入時不再依賴 SAF content:// 權限，
+     * 因此關閉 App 再開啟仍能可靠地從歷史重載。
+     * @return 內部檔案的 file:// URI 字串
      */
-    private fun savePastedTextToInternal(docId: String, text: String): String {
+    private fun saveTextToInternal(docId: String, text: String): String {
         val context = getApplication<PeleprompterApp>()
-        val file = java.io.File(context.filesDir, "pasted_$docId.txt")
+        val file = java.io.File(context.filesDir, "script_$docId.txt")
         file.writeText(text)
         return Uri.fromFile(file).toString()
+    }
+
+    /** 寫入一筆匯入歷史（背景執行緒）並刷新列表 */
+    private suspend fun saveHistoryEntry(
+        docId: String, title: String, sourcePath: String,
+        text: String, sourceType: String
+    ) {
+        val entry = ImportHistoryEntry(
+            id = docId,
+            title = title,
+            bookmarkOffset = 0,
+            importedAt = System.currentTimeMillis(),
+            sourcePath = sourcePath,
+            contentPreview = text.take(100).replace("\n", " "),
+            sourceType = sourceType
+        )
+        withContext(Dispatchers.IO) { prefs.saveImportHistoryEntry(entry) }
+        refreshHistory()
     }
 
     /** 從 .txt 或 .epub 檔案 URI 匯入 */
@@ -162,27 +173,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 val displayName = fileName ?: uri.lastPathSegment ?: "Imported File"
                 val docId = UUID.randomUUID().toString()
+
+                // 將解析後的純文字複製到內部儲存，往後重載不依賴外部 content:// 權限
+                val savedUri = withContext(Dispatchers.IO) { saveTextToInternal(docId, text) }
+
                 val doc = TextDocument(
                     id = docId,
                     title = displayName,
                     content = text,
-                    sourcePath = uri.toString()
+                    sourcePath = savedUri
                 )
                 _sourceType.value = SourceType.FILE
                 setDocument(doc)
-
-                // 儲存匯入歷史
-                val preview = text.take(100).replace("\n", " ")
-                val entry = ImportHistoryEntry(
-                    id = docId,
-                    title = displayName,
-                    bookmarkOffset = 0,
-                    importedAt = System.currentTimeMillis(),
-                    sourcePath = uri.toString(),
-                    contentPreview = preview
-                )
-                withContext(Dispatchers.IO) { prefs.saveImportHistoryEntry(entry) }
-                refreshHistory()
+                saveHistoryEntry(docId, displayName, savedUri, text, "FILE")
 
             } catch (e: Exception) {
                 _statusMessage.value = "Failed to import file: ${e.message}"
@@ -190,10 +193,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** 從歷史紀錄重新載入文件 */
-    fun reloadFromHistory(entry: ImportHistoryEntry) {
+    /**
+     * 從歷史紀錄重新載入文件。
+     * @param silent true 時不顯示錯誤訊息（用於啟動自動還原，避免打擾使用者）
+     */
+    fun reloadFromHistory(entry: ImportHistoryEntry, silent: Boolean = false) {
         if (entry.sourcePath == null) {
-            _statusMessage.value = "This entry has no source file"
+            if (!silent) _statusMessage.value = "This entry has no source file"
             return
         }
         val uri = Uri.parse(entry.sourcePath)
@@ -205,13 +211,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val text = withContext(Dispatchers.IO) {
                     val inputStream = when (uri.scheme) {
                         "file" -> {
-                            // 內部儲存的貼上文字 (file:// URI)
+                            // 內部儲存的稿件 (file:// URI)
                             val file = java.io.File(uri.path!!)
-                            if (!file.exists()) throw Exception("File no longer exists")
+                            if (!file.exists()) throw Exception("Script file no longer exists")
                             java.io.FileInputStream(file)
                         }
                         else -> {
-                            // SAF content:// URI (外部 .txt 匯入)
+                            // 舊版外部 content:// URI（向後相容；新匯入皆存內部）
                             context.contentResolver.openInputStream(uri)
                                 ?: throw Exception("Cannot open file — it may have been moved or deleted")
                         }
@@ -227,14 +233,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     bookmarkOffset = prefs.getBookmark(entry.id),
                     sourcePath = entry.sourcePath
                 )
-                // file:// 為內部儲存的貼上文字；content:// 為外部 .txt 匯入
-                _sourceType.value = if (uri.scheme == "file") SourceType.PASTE else SourceType.FILE
+                _sourceType.value =
+                    if (entry.sourceType == "PASTE") SourceType.PASTE else SourceType.FILE
                 setDocument(doc)
 
             } catch (e: Exception) {
-                _statusMessage.value = "Cannot reload file: ${e.message}"
+                // 重載失敗（例如檔案已被清除）：清掉指向它的 last-doc，避免每次啟動都失敗
+                if (prefs.getLastDocId() == entry.id) prefs.clearLastDocId()
+                if (!silent) _statusMessage.value = "Cannot reload script: ${e.message}"
             }
         }
+    }
+
+    /** 啟動時還原上次載入的稿件（若內部檔案仍在） */
+    private fun restoreLastDocument() {
+        val lastId = prefs.getLastDocId() ?: return
+        val entry = prefs.getImportHistory().find { it.id == lastId } ?: return
+        reloadFromHistory(entry, silent = true)
     }
 
     private fun setDocument(doc: TextDocument) {
@@ -243,11 +258,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _statusMessage.value = "Loaded: ${doc.title} (${doc.totalLength} chars)"
     }
 
-    /** 清除目前載入的稿件（同時清除通訊管理員狀態，避免手錶仍收到舊內容） */
+    /**
+     * 清除目前載入的稿件。
+     * 同時清除通訊管理員狀態與「上次稿件」記錄，避免手錶仍收到舊內容、
+     * 或下次啟動又自動還原已清除的稿件。歷史與內部檔案保留（可從歷史再載入）。
+     */
     fun clearCurrentDocument() {
         _currentDocument.value = null
         _sourceType.value = SourceType.NONE
         commManager.clearDocument()
+        prefs.clearLastDocId()
         _statusMessage.value = "Script cleared"
     }
 
@@ -310,7 +330,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deleteHistoryEntry(docId: String) {
+        // 找出該筆以便連同內部稿件檔一起刪除（避免內部儲存累積垃圾）
+        val entry = prefs.getImportHistory().find { it.id == docId }
         prefs.removeHistoryEntry(docId)
+
+        entry?.sourcePath?.let { sp ->
+            val u = Uri.parse(sp)
+            if (u.scheme == "file") {
+                u.path?.let { p ->
+                    val f = java.io.File(p)
+                    val filesDir = getApplication<PeleprompterApp>().filesDir
+                    // 僅刪除位於本 app 內部儲存的檔案
+                    if (f.exists() && f.parentFile == filesDir) f.delete()
+                }
+            }
+        }
+
+        // 若刪除的是目前/上次稿件，連帶清理狀態
+        if (prefs.getLastDocId() == docId) prefs.clearLastDocId()
+        if (_currentDocument.value?.id == docId) {
+            _currentDocument.value = null
+            _sourceType.value = SourceType.NONE
+            commManager.clearDocument()
+        }
         refreshHistory()
     }
 

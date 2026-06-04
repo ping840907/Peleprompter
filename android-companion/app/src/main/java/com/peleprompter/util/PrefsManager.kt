@@ -148,4 +148,8 @@ class PrefsManager(context: Context) {
     fun getLastDocId(): String? {
         return prefs.getString(KEY_LAST_DOC_ID, null)
     }
+
+    fun clearLastDocId() {
+        prefs.edit().remove(KEY_LAST_DOC_ID).apply()
+    }
 }

@@ -155,10 +155,15 @@ When enabled, a `StatusBarLayer` occupies the top 16 px. The canvas and status-t
 
 The main screen has a unified **Script** card:
 
-- **Paste** — type or paste text directly into the editor; tap **Use Pasted Text** to load it
-- **Import .txt File** — pick a file from device storage
+- **Paste** — type or paste text directly into the editor; tap **Use this text** to load it
+- **Import file** — pick a `.txt` or `.epub` from device storage
 - A persistent **source badge** shows the current script's origin (📋 pasted / 📄 file name), character count, and a clear (✕) button
-- **Send to Watch** card shows push controls only after a script is loaded
+- **Send to Watch** card enables its push controls only after a script is loaded
+
+Every loaded script (pasted or imported) is copied into the app's internal
+storage, so it can always be reloaded later regardless of file permissions.
+The **last loaded script is automatically restored** the next time the app
+is opened.
 
 ### Remote Control
 
@@ -168,15 +173,8 @@ The main screen has a unified **Script** card:
 
 ### Import History
 
-Previous imports are listed with title, date, and a preview. Tap to reload; swipe to delete.
-
-### Watch Emulator
-
-The **Emulator** button opens `WatchEmulatorActivity`, which simulates the full watch ↔ phone protocol on-device:
-
-- Select platform and text size
-- Scroll controls mirror the physical watch buttons
-- A live protocol log shows every message exchanged
+Previous scripts are listed with title, date, and a preview. Tap to reload;
+the ✕ button removes the entry and its stored copy.
 
 ## Configuration Page (PebbleKit JS)
 

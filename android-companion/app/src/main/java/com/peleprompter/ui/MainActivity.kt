@@ -65,7 +65,8 @@ class MainActivity : AppCompatActivity() {
         setupListeners()
         observeViewModel()
 
-        handleIncomingIntent(intent)
+        // 僅在全新啟動時處理 VIEW intent；避免畫面重建時重複載入同一個舊 intent
+        if (savedInstanceState == null) handleIncomingIntent(intent)
     }
 
     override fun onResume() {
@@ -127,6 +128,8 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Please paste some text first", Toast.LENGTH_SHORT).show()
             } else {
                 viewModel.loadFromPastedText(text)
+                // 載入後清空編輯框：稿件已交由上方來源徽章管理，避免重複/混淆
+                binding.etTextContent.setText("")
                 binding.etTextContent.clearFocus()
             }
         }
