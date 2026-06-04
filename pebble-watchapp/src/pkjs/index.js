@@ -558,7 +558,7 @@ function buildConfigHtml() {
     '  ctx.font=fontStr(SZ,fpx);',
     '  var lines=wrapText(ctx,text,WW-HPAD*2), lh=Math.floor(fpx*LINE_MULT);',
     '  var n=Math.max(1,Math.ceil((PADDING+lines.length*lh+PADDING)/WH));',
-    '  var kb=Math.round(n*Math.ceil(WW/8)*WH/1024);',
+    '  var kb=Math.round(n*Math.ceil(WW/32)*4*WH/1024);',
     '  document.getElementById("estPages").textContent=n;',
     '  document.getElementById("estKb").textContent=kb;',
     '  document.getElementById("infoBox").style.display="block";',
@@ -581,12 +581,13 @@ function buildConfigHtml() {
     '  return lines;',
     '}',
 
-    // 1-bit encoder (matches WatchImageRenderer.kt: BT.601, MSB-first, threshold 64)
+    // 1-bit encoder — 必須與 Pebble 原生 GBitmapFormat1Bit 完全一致：
+    //   列對齊 4 bytes、LSB-first（位元 0 = 最左像素）、1=白、BT.601、閾值 64。
     'function encode1Bit(imageData,w,h) {',
-    '  var stride=Math.ceil(w/8), result=new Uint8Array(stride*h), d=imageData.data;',
+    '  var stride=Math.ceil(w/32)*4, result=new Uint8Array(stride*h), d=imageData.data;',
     '  for (var y=0;y<h;y++) for (var x=0;x<w;x++) {',
     '    var i=(y*w+x)*4, luma=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];',
-    '    if (luma>64) result[y*stride+(x>>3)]|=(0x80>>(x&7));',
+    '    if (luma>64) result[y*stride+(x>>3)]|=(1<<(x&7));',
     '  }',
     '  return result;',
     '}',

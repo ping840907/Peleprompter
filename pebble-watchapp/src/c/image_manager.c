@@ -96,7 +96,10 @@ void image_manager_set_dimensions(ImageManager *mgr,
                                    int32_t total_pages,
                                    int32_t page_width,
                                    int32_t page_height) {
-    int32_t new_stride    = (page_width + 7) / 8;
+    // Pebble GBitmapFormat1Bit 要求每列對齊到 4 bytes（32 像素）的倍數。
+    // 必須與手機端編碼時使用的 stride 完全一致，否則 memcpy 進 GBitmap 後
+    // 每列會錯位造成畫面雜訊。
+    int32_t new_stride    = ((page_width + 31) / 32) * 4;
     int32_t new_data_size = new_stride * page_height;
 
     bool dims_changed = (mgr->page_width     != page_width  ||
@@ -125,6 +128,19 @@ void image_manager_set_dimensions(ImageManager *mgr,
         // 所有 GBitmap 大小相同，連續分配可讓堆積分配器將它們緊鄰擺放，
         // 避免後續惰性分配時被其他物件插入縫隙。
         prewarm_slots(mgr);
+
+        // 診斷：確認我們算出的 stride 與 Pebble 實際的 GBitmap 列大小一致。
+        // 若不一致代表此平台的對齊規則不同，memcpy 會錯位產生雜訊。
+        if (mgr->slots[0].bitmap) {
+            uint16_t actual_stride = gbitmap_get_bytes_per_row(mgr->slots[0].bitmap);
+            if ((int32_t)actual_stride != new_stride) {
+                APP_LOG(APP_LOG_LEVEL_ERROR,
+                        "stride 不符！計算=%ld 實際=%d（將以實際值為準）",
+                        (long)new_stride, (int)actual_stride);
+                mgr->row_stride     = actual_stride;
+                mgr->page_data_size = (int32_t)actual_stride * page_height;
+            }
+        }
     } else {
         // 尺寸不變（同一手錶切換字型大小）：只重置狀態，不碰 GBitmap
         // 這避免了不必要的 destroy→create 循環造成碎片。

@@ -22,8 +22,8 @@ import com.peleprompter.util.PebbleProtocol
  * - 每頁尺寸 = 手錶螢幕解析度 (watchWidth × watchHeight pixels)
  * - 第 0 頁頂部、最後頁底部各保留 50px 黑色留白（對應 EXTRA_SCROLL_PADDING）
  * - 輸出格式：GBitmapFormat1Bit 相容
- *   · 每行以位元組對齊 (row_stride = ceil(width / 8))
- *   · MSB = 最左側像素，1 = 白色，0 = 黑色
+ *   · 每列對齊 4 bytes (row_stride = ((width + 31) / 32) * 4)
+ *   · LSB = 最左側像素（位元 0），1 = 白色，0 = 黑色
  * - 全部頁面從同一個 StaticLayout 計算，確保分頁一致性
  *
  * @param watchWidth  手錶螢幕寬度 (pixels)
@@ -85,8 +85,9 @@ class WatchImageRenderer(
     /** StaticLayout 排版寬度 = 螢幕寬 - 左右邊界 */
     private val layoutWidth: Int = watchWidth - horizontalPadPx * 2
 
-    // 每行的 stride (位元組數)
-    val rowStride: Int = (watchWidth + 7) / 8
+    // 每行的 stride (位元組數)。
+    // Pebble GBitmapFormat1Bit 要求每列對齊到 4 bytes（32 像素）的倍數。
+    val rowStride: Int = ((watchWidth + 31) / 32) * 4
 
     /**
      * encodeTo1Bit 的列像素暫存緩衝區。
@@ -239,16 +240,16 @@ class WatchImageRenderer(
     /**
      * 將 ARGB_8888 Bitmap 轉換成 Pebble GBitmapFormat1Bit 格式。
      *
-     * 格式規範：
-     *  - 每列以整數位元組儲存，row_stride = ceil(width / 8)
-     *  - 位元 7（MSB）= 最左側像素，位元 0（LSB）= 第 7 個像素
+     * 格式規範（與 Pebble 韌體原生格式一致，否則手錶顯示雜訊）：
+     *  - 每列對齊到 4 bytes（32 像素）的倍數：row_stride = ((width + 31) / 32) * 4
+     *  - 位元 0（LSB）= 最左側像素，位元 7（MSB）= 第 8 個像素（LSB-first）
      *  - 1 = 白色，0 = 黑色
      *  - 亮度閾值：> 64 視為白色（略低以讓白色文字更飽滿）
      */
     private fun encodeTo1Bit(bitmap: Bitmap): ByteArray {
         val width  = bitmap.width
         val height = bitmap.height
-        val stride = (width + 7) / 8
+        val stride = ((width + 31) / 32) * 4
         val result = ByteArray(stride * height)  // 預設全 0（黑色）
 
         // 一次取一列像素以降低 getPixel 呼叫次數
@@ -266,7 +267,7 @@ class WatchImageRenderer(
 
                 if (luminance > 64) {   // 白色
                     val byteIdx = baseIndex + x / 8
-                    val bitIdx  = 7 - (x % 8)  // MSB = leftmost
+                    val bitIdx  = x % 8        // LSB = leftmost（Pebble 原生）
                     result[byteIdx] = (result[byteIdx].toInt() or (1 shl bitIdx)).toByte()
                 }
             }

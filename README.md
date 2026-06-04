@@ -58,7 +58,7 @@ peleprompter/
 
 ### Image-Based Rendering
 
-The phone renders the entire script into 1-bit (black/white) bitmap pages — one page per watch screen — before transmission begins. Each page is encoded in **GBitmapFormat1Bit** layout (MSB = leftmost pixel, 1 = white, row-stride = ⌈width/8⌉ bytes).
+The phone renders the entire script into 1-bit (black/white) bitmap pages — one page per watch screen — before transmission begins. Each page is encoded in **GBitmapFormat1Bit** layout, matching the Pebble firmware exactly: **LSB = leftmost pixel** (bit 0), 1 = white, and each row padded to a multiple of 4 bytes (`row-stride = ((width + 31) / 32) × 4`).
 
 ```
 Phone                                    Watch

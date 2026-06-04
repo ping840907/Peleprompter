@@ -30,7 +30,7 @@ typedef struct {
     int32_t  total_pages;  // 文件總頁數 (由 CMD_INIT_IMAGES 設定)
     int32_t  page_width;   // 每頁寬度 (pixels)
     int32_t  page_height;  // 每頁高度 (pixels)
-    int32_t  row_stride;   // 每行位元組數 = ceil(page_width / 8)
+    int32_t  row_stride;   // 每列位元組數 = ((page_width + 31) / 32) * 4（4-byte 對齊）
     int32_t  page_data_size; // 每頁原始資料大小 = row_stride × page_height
 } ImageManager;
 
