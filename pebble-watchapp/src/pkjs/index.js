@@ -365,10 +365,11 @@ function buildConfigHtml() {
     'progress::-moz-progress-bar{background:#03DAC5;border-radius:3px}',
     '#status{margin-top:12px;font-size:13px;color:#8a8a90;min-height:18px;line-height:1.45;text-align:center}',
     '#status.warn{color:#FFB74D}#status.error{color:#EF9A9A}#status.ok{color:#03DAC5}',
-    // 渲染用 canvas：不可使用 display:none —— 部分（Pebble app 內建的舊版）
-    // WebView 會對 display:none 的 canvas 回傳全 0 的 getImageData，導致頁面全黑。
-    // 改為固定定位、透明、置於底層且不接收觸控，保持可繪製。
-    '#c{position:fixed;left:0;top:0;z-index:-1;opacity:0;pointer-events:none}',
+    // 渲染用 canvas：保持可見並在正常流中，確保 WebView 實際繪製它。
+    // （display:none 或離屏 + 透明的 canvas，在部分舊版 WebView 上 getImageData
+    //  會回傳全 0，導致手錶頁面全黑。搭配 willReadFrequently 強制 CPU 後備緩衝，
+    //  讓 getImageData 可靠。）此 canvas 同時作為渲染預覽。
+    '#c{display:block;margin:14px auto 0;border:1px solid #2c2c2e;border-radius:8px;background:#000;image-rendering:pixelated}',
     '.info-box{background:#161617;border:1px solid #2c2c2e;border-radius:12px;padding:12px 14px;margin-top:14px;font-size:13px;color:#8a8a90;display:none;text-align:center}',
     '.info-box span{color:#BB86FC;font-weight:700}',
     '</style>',
@@ -457,7 +458,7 @@ function buildConfigHtml() {
     '  if (!text){document.getElementById("infoBox").style.display="none";return;}',
     '  var canvas=document.getElementById("c");',
     '  canvas.width=WW; canvas.height=WH;',
-    '  var ctx=canvas.getContext("2d"), fpx=FONT_PX[SZ];',
+    '  var ctx=canvas.getContext("2d",{willReadFrequently:true}), fpx=FONT_PX[SZ];',
     '  ctx.font=fontStr(SZ,fpx);',
     '  var lines=wrapText(ctx,text,WW-HPAD*2), lh=Math.floor(fpx*LINE_MULT);',
     '  var n=Math.max(1,Math.ceil((PADDING+lines.length*lh+PADDING)/WH));',
@@ -513,7 +514,7 @@ function buildConfigHtml() {
     '  prog.value=0;',
     '  var canvas=document.getElementById("c");',
     '  canvas.width=WW; canvas.height=WH;',
-    '  var ctx=canvas.getContext("2d"), fpx=FONT_PX[SZ], lh=Math.floor(fpx*LINE_MULT);',
+    '  var ctx=canvas.getContext("2d",{willReadFrequently:true}), fpx=FONT_PX[SZ], lh=Math.floor(fpx*LINE_MULT);',
     '  ctx.font=fontStr(SZ,fpx);',
     '  var lines=wrapText(ctx,text,WW-HPAD*2);',
     '  var totalH=PADDING+lines.length*lh+PADDING;',
@@ -535,7 +536,19 @@ function buildConfigHtml() {
     '      ctx.fillText(lines[li],HPAD,y);',
     '    }',
     '    var id=ctx.getImageData(0,0,WW,WH);',
-    '    pagesOut.push(toBase64(encode1Bit(id,WW,WH)));',
+    '    var enc=encode1Bit(id,WW,WH);',
+    // 偵測「全黑」頁面：若有文字卻渲染出全 0，多半是此裝置的設定瀏覽器
+    // 不支援 canvas 像素讀取。直接中止並提示，避免送出空白頁讓手錶一片空白。
+    '    if (pageN===0 && lines.length>0) {',
+    '      var any=false; for (var k=0;k<enc.length;k++){ if(enc[k]!==0){any=true;break;} }',
+    '      if (!any) {',
+    '        setStatus("This phone\\u2019s config browser could not render the text (blank image). Please use the Peleprompter Android app to send your script.","error");',
+    '        btn.disabled=false;',
+    '        document.getElementById("progressWrap").style.display="none";',
+    '        return;',
+    '      }',
+    '    }',
+    '    pagesOut.push(toBase64(enc));',
     '    prog.value=Math.round((pageN+1)/numPages*100);',
     '    setStatus("Rendering page "+(pageN+1)+" / "+numPages+"...");',
     '    pageN++;',
