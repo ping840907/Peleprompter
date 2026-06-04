@@ -37,7 +37,7 @@ object PebbleProtocol {
      * 每個 AppMessage 圖片資料區塊的最大位元組數。
      * Pebble 手錶收件匣 = 2048 bytes，扣除 header 開銷約 148 bytes。
      */
-    const val IMAGE_CHUNK_DATA_SIZE = 1900
+    const val IMAGE_CHUNK_DATA_SIZE = 1024
 
     // ── 文字大小常數 ─────────────────────────────────────────────
     // 注意：原 SMALL=0/MEDIUM=1/LARGE=2 已整體上移 +2，舊存值透過手錶端遷移處理

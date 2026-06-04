@@ -38,8 +38,8 @@ var CMD_INIT_IMAGES      = 3;
 var CMD_REQUEST_PAGE     = 4;
 var CMD_SEND_IMAGE_CHUNK = 5;
 
-// 每個區塊最多傳送位元組數（留出 AppMessage header 空間，與 constants.h 一致）
-var IMAGE_CHUNK_DATA_SIZE = 1900;
+// 每個區塊最多傳送位元組數（與 constants.h 一致；1024 安全小於手錶 2048 inbox）
+var IMAGE_CHUNK_DATA_SIZE = 1024;
 
 // ══════════════════════════════════════════════════════════════════
 // 狀態
@@ -84,6 +84,9 @@ function processQueue() {
 // ══════════════════════════════════════════════════════════════════
 Pebble.addEventListener('ready', function() {
   console.log('[pkjs] Ready. Pages loaded: ' + pages.length);
+  // 若 JS（重）啟動時已有頁面（從 localStorage 還原），主動通知手錶，
+  // 涵蓋「手錶已在等待、但啟動時序錯過 CMD_REQUEST_TEXT」的情況。
+  if (pages.length > 0 && totalPages > 0) notifyWatchReady();
 });
 
 Pebble.addEventListener('appmessage', function(e) {

@@ -89,6 +89,13 @@ static AppTimer *s_page_timeout_timer = NULL;
 static int32_t   s_pending_page_num   = -1;
 static int32_t   s_page_retry_count   = 0;
 
+// 初始化請求重試：手機端（pkjs）在手錶開啟當下可能尚未就緒，
+// 第一次的 CMD_REQUEST_TEXT 可能無人回應。若遲遲未初始化，定期重送。
+#define INIT_RETRY_MS        3000
+#define INIT_MAX_RETRIES     8
+static AppTimer *s_init_retry_timer = NULL;
+static int32_t   s_init_retry_count = 0;
+
 // ============================================================
 // 輔助：計算最大捲動偏移
 // ============================================================
@@ -169,6 +176,37 @@ static void cancel_page_timeout(void) {
     }
     s_pending_page_num = -1;
     s_page_retry_count = 0;
+}
+
+// ============================================================
+// 初始化請求重試
+// ============================================================
+static void cancel_init_retry(void) {
+    if (s_init_retry_timer) {
+        app_timer_cancel(s_init_retry_timer);
+        s_init_retry_timer = NULL;
+    }
+    s_init_retry_count = 0;
+}
+
+static void init_retry_tick(void *data) {
+    s_init_retry_timer = NULL;
+    if (s_images_initialized || !s_canvas_layer) return;  // 已完成或視窗已卸載
+    if (s_init_retry_count >= INIT_MAX_RETRIES) {
+        APP_LOG(APP_LOG_LEVEL_WARNING, "初始化重試上限，停止重送 CMD_REQUEST_TEXT");
+        return;
+    }
+    s_init_retry_count++;
+    APP_LOG(APP_LOG_LEVEL_INFO, "尚未初始化，第 %ld 次重送 CMD_REQUEST_TEXT",
+            (long)s_init_retry_count);
+    GRect b = layer_get_bounds(s_canvas_layer);
+    messaging_request_init(b.size.w, b.size.h, (int32_t)s_text_size);
+    s_init_retry_timer = app_timer_register(INIT_RETRY_MS, init_retry_tick, NULL);
+}
+
+static void start_init_retry(void) {
+    cancel_init_retry();
+    s_init_retry_timer = app_timer_register(INIT_RETRY_MS, init_retry_tick, NULL);
 }
 
 // ============================================================
@@ -689,6 +727,7 @@ static void on_images_initialized(int32_t total_pages,
     s_images_initialized = true;
     s_target_scroll_px   = -1;
     cancel_page_timeout();
+    cancel_init_retry();          // 已收到初始化，停止重送 CMD_REQUEST_TEXT
     s_waiting_for_page = false;
 
     image_manager_set_dimensions(&s_img_mgr, total_pages, page_width, page_height);
@@ -984,6 +1023,8 @@ static void main_window_load(Window *window) {
     GRect canvas_bounds = layer_get_bounds(s_canvas_layer);
     messaging_request_init(canvas_bounds.size.w, canvas_bounds.size.h, (int32_t)s_text_size);
     s_waiting_for_page = false;
+    // 若手機端尚未就緒導致無回應，定期重送直到收到 CMD_INIT_IMAGES
+    start_init_retry();
 }
 
 static void main_window_unload(Window *window) {
@@ -1008,6 +1049,9 @@ static void main_window_unload(Window *window) {
         s_exit_confirm_timer = NULL;
     }
     s_exit_confirm_pending = false;
+
+    cancel_init_retry();
+    cancel_page_timeout();
 
     layer_destroy(s_canvas_layer);
     text_layer_destroy(s_status_layer);
